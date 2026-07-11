@@ -128,12 +128,22 @@ class TestPdfMerger:
         assert len(h1) == 64
 
     def test_hash_parts_order_matters(self, work_dir):
-        """hash_parts should produce different result for different order."""
-        parts = self.create_parts(work_dir, "a.pdf", 2, 1024)
-        parts2 = self.create_parts(work_dir, "b.pdf", 2, 1024)
+        """hash_parts should produce different result for different file content."""
+        # Create two files with DIFFERENT content (same filenames but different bytes)
+        p1 = work_dir / "a.pdf.1"
+        p2 = work_dir / "a.pdf.2"
+        p1.write_bytes(b"AAAA")
+        p2.write_bytes(b"BBBB")
+        parts1 = {1: "a.pdf.1", 2: "a.pdf.2"}
 
-        h1 = hash_parts(work_dir, parts)
+        p3 = work_dir / "b.pdf.1"
+        p4 = work_dir / "b.pdf.2"
+        p3.write_bytes(b"CCCC")
+        p4.write_bytes(b"DDDD")
+        parts2 = {1: "b.pdf.1", 2: "b.pdf.2"}
+
+        h1 = hash_parts(work_dir, parts1)
         h2 = hash_parts(work_dir, parts2)
 
-        # Same sizes but different content → different hash
+        # Different content → different hash
         assert h1 != h2

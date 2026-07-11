@@ -52,9 +52,10 @@ class SplitManifest:
         """Build expected split-file manifest from git ls-tree output.
 
         Returns {rel_dir(posix): {base: {idx: filename}}} or None on failure.
+        Empty output (no split files) returns empty dict, not None.
         Source: v1.0 lines 804-829.
         """
-        if not git_ls_tree_output:
+        if git_ls_tree_output is None:
             return None
 
         manifest = {}

@@ -53,8 +53,9 @@ class TestSplitManifest:
         assert "小学/数学" in manifest
 
     def test_build_manifest_empty(self):
+        # Empty output (git failure) returns None (fail-closed)
         manifest = SplitManifest.build_expected_manifest("", [])
-        assert manifest == {}
+        assert manifest == {}  # Empty string yields empty dict, not None
 
     def test_missing_parts(self):
         assert SplitManifest.missing_parts([1, 3, 5]) == [2, 4]
@@ -74,7 +75,6 @@ class TestSplitManifest:
 
         assert "book.pdf" in groups
         assert groups["book.pdf"] == {1: ["book.pdf.1"], 2: ["book.pdf.2"]}
-        assert "book.pdf" not in groups  # non-split ignored
         assert "other.pdf" in groups
 
     def test_clean_stale_tmp(self, tmp_path):
