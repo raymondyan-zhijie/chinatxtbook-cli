@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.eggs/
+*.spec
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# v1.0 legacy (kept as reference, not active code)
+china_textbook_v1.0.py
+
+# Runtime artifacts
+ChinaTextbook_Workspace/
+china_textbook_state.json
+china_textbook.log
+china_textbook.lock
+china_textbook_report.md
+*.pdf.tmp
