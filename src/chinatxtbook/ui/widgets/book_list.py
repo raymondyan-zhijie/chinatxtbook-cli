@@ -14,6 +14,26 @@ from chinatxtbook.ui.messages import BookFocused
 from chinatxtbook.utils.format import fmt_size
 
 
+_CN_NUMS = "零一二三四五六七八九十"
+
+def _natural_key(s: str) -> tuple:
+    """Natural sort key handling Chinese numerals and Arabic digits."""
+    import re
+    parts = []
+    for chunk in re.split(r'(\d+)', s):
+        if chunk.isdigit():
+            parts.append((0, int(chunk)))
+        else:
+            # Check for Chinese numerals
+            cn_val = 0
+            for ch in chunk:
+                idx = _CN_NUMS.find(ch)
+                if idx > 0:
+                    cn_val = cn_val * 10 + idx
+            parts.append((1, cn_val if cn_val > 0 else chunk))
+    return tuple(parts)
+
+
 class BookListWidget(ListView):
     """Center panel: books in the selected directory.
 
@@ -70,8 +90,8 @@ class BookListWidget(ListView):
         output_dir = OUTPUT_DIR
         idx = 0
 
-        # Add split groups
-        for base_name, parts in sorted(groups.items()):
+        # Add split groups with natural sort
+        for base_name, parts in sorted(groups.items(), key=lambda x: _natural_key(x[0])):
             # Use actual file directory (from first part's full path), not navigation dir
             first_path = list(parts.values())[0][1]  # full git path of first part
             actual_dir = str(Path(first_path).parent.as_posix())
@@ -93,7 +113,7 @@ class BookListWidget(ListView):
             idx += 1
 
         # Add single PDFs
-        for name, fpath in sorted(singles.items()):
+        for name, fpath in sorted(singles.items(), key=lambda x: _natural_key(x[0])):
             # Use actual file directory from full git path
             actual_dir = str(Path(fpath).parent.as_posix())
             key = f"{actual_dir}/{name}"
