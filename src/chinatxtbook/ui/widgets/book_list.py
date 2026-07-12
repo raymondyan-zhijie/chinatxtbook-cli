@@ -5,14 +5,18 @@ Space/Enter natively toggles selection.
 """
 
 from textual.widgets import ListView, ListItem, Label
+from textual.binding import Binding
 
 
 class BookListWidget(ListView):
     """Center panel: books in the selected directory.
 
-    Space/Enter: toggle selection (native ListView behavior).
-    Arrow keys: move focus.
+    Space/Enter: toggle selection. Arrow keys: move focus.
     """
+
+    BINDINGS = [
+        Binding("space", "select", "选择", show=False),
+    ]
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -94,16 +98,27 @@ class BookListWidget(ListView):
             item = ListItem(Label("展开到底层目录查看教材文件"))
             self.append(item)
 
+    def action_select(self) -> None:
+        """Space: manually trigger selection (in case native ListView
+        Space handling is overridden by parent bindings)."""
+        if self.index is not None:
+            item = self.children[self.index] if self.index < len(self.children) else None
+            if item:
+                self._toggle_item(item, self.index)
+
     def on_list_view_selected(self, event: ListView.Selected) -> None:
-        """Space/Enter: toggle selection via native ListView."""
+        """Enter/click: toggle selection via native ListView."""
         if event.item is None:
             return
-        # Find the index of the selected item
         try:
             idx = self.children.index(event.item)
         except ValueError:
             return
+        self._toggle_item(event.item, idx)
+        event.stop()
 
+    def _toggle_item(self, item, idx: int) -> None:
+        """Toggle selection for an item at given index."""
         meta = self._book_meta.get(idx)
         if not meta:
             return
@@ -112,7 +127,7 @@ class BookListWidget(ListView):
         if not app or not hasattr(app, 'selected_keys'):
             return
 
-        # Toggle in app state
+        # Toggle
         if key in app.selected_keys:
             app.selected_keys.discard(key)
         else:
@@ -120,38 +135,30 @@ class BookListWidget(ListView):
             if hasattr(app, 'focused_book'):
                 app.focused_book = meta
 
-        # Recalculate size
+        # Recalculate
         if hasattr(app, 'estimated_size'):
             app.estimated_size = sum(
                 d["size"] for d in self._all_groups.values()
                 if d["key"] in app.selected_keys
             )
-
-        # Sync _catalog_books
         if hasattr(app, '_catalog_books'):
             app._catalog_books = list(self._all_groups.values())
-
-        # Update status bar
         if hasattr(app, '_update_status_bar'):
             app._update_status_bar()
 
-        # Refresh the item label with new checkmark
+        # Refresh label
         selected = key in app.selected_keys
         check = "☑" if selected else "⬜"
         name = meta["name"]
-        parts = f"{meta['part_count']}卷"
         from chinatxtbook.utils.format import fmt_size
         sz_str = fmt_size(meta["size"]) if meta["size"] else "?"
-        new_label = f"{check}  {name}  │  {parts}  │  {sz_str}"
+        new_label = f"{check}  {name}  │  {meta['part_count']}卷  │  {sz_str}"
 
-        # Update the ListItem's Label child
         try:
-            label_widget = event.item.query_one(Label)
+            label_widget = item.query_one(Label)
             label_widget.update(new_label)
         except Exception:
             pass
-
-        event.stop()
 
     def on_list_view_highlighted(self, event: ListView.Highlighted) -> None:
         """Update detail panel when highlight changes."""
