@@ -87,7 +87,7 @@ class PipelineWorker:
             app.pipeline_running = False
             return
 
-        checkout_paths = sorted(d + "/" for d in dirs)
+        checkout_paths = sorted(d.rstrip("/") + "/" for d in dirs)
 
         # Step 3: Fetch + Checkout
         self._ui_status(f"Fetching updates...")
@@ -111,12 +111,12 @@ class PipelineWorker:
             )
             _log("git fetch done")
 
-            # Set sparse-checkout rules
-            _log("sparse_checkout...")
-            await asyncio.to_thread(git.sparse_checkout, checkout_paths)
-            _log("sparse_checkout done")
+            # Disable sparse-checkout so index includes all files
+            _log("disabling sparse-checkout...")
+            git.run(["sparse-checkout", "disable"], retry=1)
+            _log("sparse-checkout disabled")
 
-            # Restore files individually (more reliable than checkout for blobless)
+            # Restore files individually
             self._ui_status(f"Restoring {len(dirs)} dirs...")
             self._ui_progress(20, "Downloading")
 
