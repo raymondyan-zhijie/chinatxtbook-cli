@@ -117,12 +117,24 @@ class BookListWidget(DataTable):
             else:
                 self.add_row("", "此目录下无教材文件", "", "")
 
+    def on_key(self, event) -> None:
+        """Handle Space key for selection toggle."""
+        if event.key == "space":
+            if self.cursor_row is not None and self.cursor_row >= 0:
+                self._toggle_row(self.cursor_row)
+                event.prevent_default()
+                event.stop()
+
     def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
-        """Space/Enter: toggle selection."""
-        if event.row_key is None:
+        """Enter/click: toggle selection."""
+        self._toggle_row(event.row_key)
+
+    def _toggle_row(self, row_key) -> None:
+        """Toggle selection checkmark for a row."""
+        if row_key is None:
             return
         try:
-            row_data = self.get_row(event.row_key)
+            row_data = self.get_row(row_key)
             name = str(row_data[1])
             if name.startswith("📂") or not name:
                 return
@@ -139,11 +151,11 @@ class BookListWidget(DataTable):
             current = str(row_data[0])
             app = self.app
             if current == "⬜":
-                self.update_cell(event.row_key, "", "☑")
+                self.update_cell(row_key, "", "☑")
                 if hasattr(app, 'toggle_book_selection'):
                     app.toggle_book_selection(key, self._all_groups.get(key, {}))
             else:
-                self.update_cell(event.row_key, "", "⬜")
+                self.update_cell(row_key, "", "⬜")
                 if hasattr(app, 'toggle_book_selection'):
                     app.toggle_book_selection(key, self._all_groups.get(key, {}))
         except Exception:
