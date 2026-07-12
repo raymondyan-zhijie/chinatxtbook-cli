@@ -79,10 +79,10 @@ class CatalogTreeWidget(Tree):
                 # Direct child
                 pass
 
-        # Alternate approach: use git ls-tree to get direct tree entries
-        # This gives us both trees (dirs) and blobs (files)
+        # Use git ls-tree to get direct children
+        # KEEP trailing slash so git lists directory contents
         ok, out, _ = self._git_client.run(
-            ["ls-tree", "HEAD", "--", path.rstrip("/")], retry=1
+            ["ls-tree", "HEAD", "--", f"{path}/"], retry=1
         )
         if not ok:
             return
@@ -92,19 +92,20 @@ class CatalogTreeWidget(Tree):
             line = line.strip()
             if not line:
                 continue
-            # git ls-tree format: <mode> <type> <hash>\t<name>
+            # git ls-tree output: <mode> <type> <hash>\t<full_path>
+            # full_path includes the parent, e.g. "小学/语文"
             parts = re.split(r'\s+', line, maxsplit=3)
             if len(parts) < 4:
                 continue
-            mode, obj_type, obj_hash, name = parts[0], parts[1], parts[2], parts[3]
-            name = name.strip()
+            mode, obj_type, obj_hash, full_name = parts[0], parts[1], parts[2], parts[3]
+            # Extract just the basename for display
+            name = full_name.split("/")[-1] if "/" in full_name else full_name
 
             if obj_type == "tree":
-                child_path = f"{path}/{name}"
+                # full_name is already the correct git path
                 child_node = node.add(f"📁 {name}", expand=False)
-                child_node.data = {"type": "dir", "path": child_path, "loaded": False}
+                child_node.data = {"type": "dir", "path": full_name, "loaded": False}
                 child_node.add(" ... ", expand=False)
-            # Blobs (files) are NOT shown in the tree — they appear in the center panel
 
     def on_tree_node_expanded(self, event: Tree.NodeExpanded) -> None:
         """Lazy-load children when a directory node is expanded."""
