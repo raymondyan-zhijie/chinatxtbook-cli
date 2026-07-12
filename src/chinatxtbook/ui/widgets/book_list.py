@@ -65,7 +65,7 @@ class BookListWidget(ListView):
             key = f"{dir_path}/{base_name}"
             sz = sum(size_cache.get(fpath, 0) for _, fpath in parts.values()) if size_cache else 0
             self._all_groups[key] = {
-                "key": key, "name": base_name, "path": dir_path,
+                "key": key, "name": base_name, "path": dir_path.rstrip("/"),
                 "part_count": len(parts), "parts": parts,
                 "size": sz, "status": "not_downloaded",
             }
@@ -82,7 +82,7 @@ class BookListWidget(ListView):
             key = f"{dir_path}/{name}"
             sz = size_cache.get(fpath, 0) if size_cache else 0
             self._all_groups[key] = {
-                "key": key, "name": name, "path": dir_path,
+                "key": key, "name": name, "path": dir_path.rstrip("/"),
                 "part_count": 1, "parts": {1: (name, fpath)},
                 "size": sz, "status": "not_downloaded",
             }

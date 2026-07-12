@@ -73,19 +73,19 @@ class PipelineWorker:
         # ── Stage 2: Downloading (checkout) ────────────────
         _progress(20, "Downloading")
 
-        # Collect selected paths from books
+        # Collect selected paths from books (clean, no trailing slash)
         selected_paths = set()
         for book in selected_books:
-            path = book.get("path", "")
+            path = book.get("path", "").rstrip("/")
             if path:
-                selected_paths.add(path + "/")
+                selected_paths.add(path)
 
         if not selected_paths:
             _status("❌ 无法确定下载路径")
             app.pipeline_running = False
             return
 
-        state["selected_paths"] = sorted(selected_paths)
+        state["selected_paths"] = sorted(p + "/" for p in selected_paths)
         state["target_dirs"] = sorted(selected_paths)
 
         # Validate paths exist in tree
@@ -99,9 +99,10 @@ class PipelineWorker:
             app.pipeline_running = False
             return
 
-        # Sparse checkout
-        _status(f"📥 检出 {len(selected_paths)} 个目录...")
-        await asyncio.to_thread(git.sparse_checkout, list(selected_paths))
+        # Sparse checkout (git needs trailing / for directories)
+        checkout_paths = [p + "/" for p in selected_paths]
+        _status(f"📥 检出 {len(checkout_paths)} 个目录...")
+        await asyncio.to_thread(git.sparse_checkout, checkout_paths)
         await asyncio.to_thread(git.checkout, branch)
 
         _progress(50, "Downloading")
@@ -117,13 +118,17 @@ class PipelineWorker:
         _status(f"🔄 合并与校验 {len(selected_books)} 册...")
         _progress(75, "Merging")
 
-        # Build manifest
+        # Build manifest — flatten ls_tree results (each returns a list)
         from chinatxtbook.core.manifest import SplitManifest
 
-        ls_out = "\n".join(
-            git.ls_tree(p, recursive=True) for p in selected_paths
+        all_files = []
+        for p in selected_paths:
+            p_clean = p.rstrip("/")
+            all_files.extend(git.ls_tree(p_clean, recursive=True))
+        ls_out = "\n".join(all_files)
+        manifest = SplitManifest.build_expected_manifest(
+            ls_out, [p.rstrip("/") for p in selected_paths]
         )
-        manifest = SplitManifest.build_expected_manifest(ls_out, list(selected_paths))
         if manifest is None:
             _status("❌ Git 树清单读取失败 (fail-closed)")
             app.pipeline_running = False
