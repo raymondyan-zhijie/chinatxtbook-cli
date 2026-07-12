@@ -27,6 +27,8 @@ class SelectedScreen(ModalScreen):
             yield Static("", id="selected-summary", classes="summary-line")
             yield DataTable(id="selected-table")
             yield Static("", id="selected-empty", classes="modal-hint")
+            with Horizontal():
+            yield Button("开始下载 (F5)", variant="primary", id="selected-download")
             yield Button("关闭 (Esc)", variant="default", id="selected-close")
 
     def on_mount(self) -> None:
@@ -69,6 +71,11 @@ class SelectedScreen(ModalScreen):
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "selected-close":
             self.dismiss()
+        elif event.button.id == "selected-download":
+            self.dismiss()
+            app = self.app
+            if hasattr(app, 'action_confirm_download'):
+                app.action_confirm_download()
 
     def action_dismiss(self) -> None:
         self.dismiss()

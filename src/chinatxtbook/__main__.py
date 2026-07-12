@@ -28,6 +28,9 @@ def main():
         return run_cli(remaining)
 
     # Default: TUI mode
+    from chinatxtbook.utils.platform import setup_console, setup_interrupt_handler
+    setup_console()
+    setup_interrupt_handler()
     from chinatxtbook.ui.app import run_app
     return run_app()
 

@@ -59,15 +59,20 @@ class ConfirmOverlay(ModalScreen):
         )
 
         disk = self.query_one("#confirm-disk", Static)
+        yes_btn = self.query_one("#confirm-yes", Button)
         if usage.free < peak:
             disk.update(
-                f"⚠️ 磁盘可用: {free_gb:.1f} GB — 可能不足",
+                f"⛔ 磁盘空间不足，无法开始下载\n"
+                f"需要峰值: {fmt_size(peak)}\n"
+                f"当前可用: {fmt_size(usage.free)}\n"
+                f"请清理空间后重试"
             )
-            disk.add_class("notification-warning")
+            disk.add_class("notification-error")
+            yes_btn.disabled = True
         else:
             disk.update(f"磁盘可用: {free_gb:.1f} GB")
 
-        self.query_one("#confirm-yes", Button).focus()
+        yes_btn.focus()
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "confirm-yes":

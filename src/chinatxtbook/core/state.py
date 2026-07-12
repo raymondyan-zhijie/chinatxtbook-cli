@@ -13,7 +13,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
 
-from chinatxtbook import VERSION, COMPATIBLE_STATE_VERSIONS
+from chinatxtbook import VERSION, COMPATIBLE_STATE_VERSIONS, MIGRATABLE_STATE_VERSIONS
 from chinatxtbook.config import STATE_FILE
 from chinatxtbook.utils.platform import is_interrupted
 
@@ -57,7 +57,29 @@ class StateManager:
             try:
                 s = json.loads(self.state_file.read_text("utf-8"))
                 ver = str(s.get("version", ""))
-                if ver not in COMPATIBLE_STATE_VERSIONS:
+                if ver in MIGRATABLE_STATE_VERSIONS:
+                    # v1.0→v1.1 migration: preserve groups (hashes/sizes),
+                    # clear directory selections (selected_paths etc.)
+                    base = self.new_state()
+                    # Preserve groups with legacy_imported flag
+                    old_groups = s.get("groups") or {}
+                    for k, v in old_groups.items():
+                        if v.get("status") == "ok" and v.get("sha256"):
+                            v["legacy_imported"] = True
+                            v["requires_reselection"] = True
+                    base["groups"] = old_groups
+                    base["repo_source"] = s.get("repo_source")
+                    base["default_branch"] = s.get("default_branch")
+                    base["clone_done"] = s.get("clone_done", False)
+                    # Migration record
+                    base["migration"] = {
+                        "from_version": ver,
+                        "to_version": VERSION,
+                        "migrated_at": datetime.now().isoformat(),
+                        "notes": "Cleared selected_paths; user must re-select",
+                    }
+                    return base
+                elif ver not in COMPATIBLE_STATE_VERSIONS:
                     backup = self.state_file.with_name(
                         self.state_file.name + f".{s.get('version', 'old')}.bak"
                     )

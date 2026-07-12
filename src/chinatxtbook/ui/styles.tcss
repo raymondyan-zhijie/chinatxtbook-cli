@@ -34,21 +34,21 @@ Header {
 }
 
 #catalog-tree {
-    width: 35%;
+    width: 25%;
     border: solid $border;
     background: $surface-light;
     padding: 0 1;
 }
 
 #book-list {
-    width: 40%;
+    width: 45%;
     border: solid $border;
     background: $surface;
     padding: 0 1;
 }
 
 #detail-panel {
-    width: 25%;
+    width: 30%;
     border: solid $border;
     background: $surface-light;
     padding: 1 1;

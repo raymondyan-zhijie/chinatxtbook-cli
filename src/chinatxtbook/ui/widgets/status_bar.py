@@ -23,13 +23,17 @@ class StatusBarWidget(Container):
     def update_info(self, selected_count: int = 0, estimated_size: int = 0) -> None:
         """Update selection display."""
         sel = self.query_one("#status-selection", Static)
+        # Get disk space
+        import shutil, os
+        usage = shutil.disk_usage(os.getcwd())
+        free_str = fmt_size(usage.free)
         if selected_count > 0:
             sel.update(
                 f"☑ 已选 {selected_count} 册 │ 💾 {fmt_size(estimated_size)} │ "
-                f"Tab切换面板 F5下载"
+                f"💿 {free_str} │ F5下载"
             )
         else:
-            sel.update("📦 就绪 — Tab切换面板 Space选择教材 ←→展开目录")
+            sel.update(f"📦 就绪 │ 💿 {free_str} │ Space选择 F5下载")
 
     def update_progress(self, pct: float = 0, stage: str = "",
                         current: str = "", done: int = 0, total: int = 0) -> None:

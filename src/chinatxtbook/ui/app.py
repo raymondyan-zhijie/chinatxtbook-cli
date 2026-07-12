@@ -70,6 +70,19 @@ class ChinaTextbookApp(App):
 
     def _check_repo_status(self) -> None:
         if self.git_client and self.git_client.is_repo_valid():
+            # FR-002: verify origin is official GitHub repo
+            origin = self.git_client.get_origin_url()
+            if origin:
+                from chinatxtbook.config import GITHUB_REPO
+                official_base = GITHUB_REPO.rstrip("/").replace(".git", "")
+                actual_base = origin.rstrip("/").replace(".git", "")
+                if official_base != actual_base:
+                    self.sub_title = "⚠️ 非官方仓库 — 拒绝操作"
+                    self.notify(
+                        f"工作区 origin 非官方来源\n期望: {GITHUB_REPO}\n实际: {origin}\n"
+                        "请删除 ChinaTextbook_Workspace 目录后重新运行",
+                        severity="error",
+                    )
             branch = self.state.get("default_branch", "master")
             self.sub_title = f"📦 仓库就绪 [{branch}]"
         else:

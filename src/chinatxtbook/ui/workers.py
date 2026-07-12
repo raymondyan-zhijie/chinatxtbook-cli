@@ -40,6 +40,7 @@ class PipelineWorker:
 
     def _ui_status(self, text):
         _log(f"STATUS: {text}")
+        self.app._log_buffer.append(("STEP", text))
         bar = self._find_status_bar()
         if bar:
             bar.update_status(text)
@@ -48,11 +49,24 @@ class PipelineWorker:
         bar = self._find_status_bar()
         if bar:
             bar.update_progress(pct=pct, stage=stage, done=done)
+        # Update _tasks for SCR-TASKS
+        if self.app._tasks:
+            self.app._tasks[0]["stage"] = stage
+            self.app._tasks[0]["progress"] = int(pct)
 
     async def run(self, selected_books: list) -> None:
         app = self.app
         total = len(selected_books)
         _log(f"=== PIPELINE START: {total} books ===")
+
+        # Populate _tasks for SCR-TASKS screen
+        app._tasks = [{
+            "id": f"tsk-{total}",
+            "name": f"下载 {total} 册教材",
+            "stage": "Preparing",
+            "progress": 0,
+            "status": "Running",
+        }]
 
         for i, b in enumerate(selected_books[:5]):
             _log(f"  [{i}] key={b.get('key','?')} path={b.get('path','?')} "
@@ -341,7 +355,9 @@ class PipelineWorker:
             msg += f", {fail_count} failed"
         msg += f" -> {OUTPUT_DIR}"
         self._ui_status(msg)
+        app._log_buffer.append(("OK", msg))
         _log(f"=== PIPELINE DONE: {ok_count} ok, {fail_count} failed ===")
+        app._tasks = []
         app.pipeline_running = False
 
     async def _merge(self, sd, od, base, parts):
