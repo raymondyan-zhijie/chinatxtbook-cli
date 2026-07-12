@@ -95,24 +95,51 @@ class PipelineWorker:
         branch = state.get("default_branch", "master")
 
         try:
-            # Fetch is critical for blobless clones
-            _log("git fetch...")
-            await asyncio.to_thread(git.fetch, branch)
+            # Fetch all objects (critical for blobless clones behind slow networks)
+            _log("git fetch origin...")
+            self._ui_status("Fetching repo data...")
+            self._ui_progress(10, "Downloading")
+            await asyncio.wait_for(
+                asyncio.to_thread(git.fetch, branch),
+                timeout=120,
+            )
             _log("git fetch done")
 
-            self._ui_status(f"Downloading {len(dirs)} directories...")
+            # Set sparse-checkout rules
             _log("sparse_checkout...")
             await asyncio.to_thread(git.sparse_checkout, checkout_paths)
-            _log("sparse_checkout done, checkout...")
-            self._ui_progress(30, "Downloading")
-            await asyncio.wait_for(
-                asyncio.to_thread(git.checkout, branch),
-                timeout=600,
-            )
-            _log("checkout done")
+            _log("sparse_checkout done")
+
+            # Restore files individually (more reliable than checkout for blobless)
+            self._ui_status(f"Restoring {len(dirs)} dirs...")
+            self._ui_progress(20, "Downloading")
+
+            # Collect all file paths to restore
+            all_paths = []
+            for book in selected_books:
+                for pi in book.get("parts", {}).values():
+                    fp = pi[1] if isinstance(pi, tuple) else pi
+                    all_paths.append(fp)
+
+            all_paths = list(set(all_paths))
+            _log(f"Restoring {len(all_paths)} files...")
+
+            # Restore in batches
+            for i in range(0, len(all_paths), 50):
+                batch = all_paths[i:i + 50]
+                ok, _, err = git.run(
+                    ["restore", "--source=HEAD", "--worktree", "--"] + batch,
+                    allow_fetch=True, retry=1,
+                )
+                if not ok:
+                    _log(f"restore batch failed: {err[:100]}")
+                pct = 20 + int(30 * (i + len(batch)) / max(len(all_paths), 1))
+                self._ui_progress(min(pct, 50), "Downloading")
+
+            _log("restore done")
         except asyncio.TimeoutError:
             _log("TIMEOUT")
-            self._ui_status("ERROR: Download timed out (10 min)")
+            self._ui_status("ERROR: Download timed out")
             app.pipeline_running = False
             return
         except Exception as e:
