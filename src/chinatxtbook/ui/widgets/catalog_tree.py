@@ -37,7 +37,7 @@ class CatalogTreeWidget(Tree):
             if not self._git_client.path_exists_in_tree(top):
                 continue
             # Get subdirectories of this top dir
-            children = self._git_client.ls_tree(f"{top}/")
+            children = self._git_client.ls_tree(f"{top}/") or []
             if not children:
                 continue
             # Add root node with placeholder child (for expand arrow)
@@ -57,7 +57,7 @@ class CatalogTreeWidget(Tree):
             return
 
         # Get git tree entries for this path
-        entries = self._git_client.ls_tree(f"{path}/")
+        entries = self._git_client.ls_tree(f"{path}/") or []
         if not entries:
             return
 

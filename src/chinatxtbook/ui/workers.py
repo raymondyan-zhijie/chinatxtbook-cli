@@ -153,7 +153,7 @@ class PipelineWorker:
                     if r.returncode == 0:
                         dest.write_bytes(r.stdout)
                         break
-                    _log(f"show {git_path[:50]} attempt {attempt+1}: {err[:80]}")
+                    _log(f"show {git_path[:50]} attempt {attempt+1}: {r.stderr.decode('utf-8','replace')[:80]}")
                     await asyncio.sleep(1)
                 else:
                     failed_paths.append(git_path)
@@ -204,6 +204,63 @@ class PipelineWorker:
             return
 
         self._ui_status(f"Found {found}/{total} books on disk")
+        # ── Safety: run GroupEvaluator before merging ──────────
+        self._ui_status("Safety check...")
+        self._ui_progress(45, "Verifying")
+
+        from chinatxtbook.core.manifest import SplitManifest, SPLIT_RE
+        import os as _os
+        from pathlib import Path as _Path
+
+        # Build manifest from git tree (fail-closed)
+        all_files = []
+        for d in dirs:
+            result = git.ls_tree(d, recursive=True)
+            if result is None:
+                _log(f"FAIL-CLOSED: cannot read git tree for {d}")
+                self._ui_status("ERROR: Git tree read failed (fail-closed)")
+                app.pipeline_running = False
+                return
+            all_files.extend(result)
+        manifest = SplitManifest.build_expected_manifest("\n".join(all_files), list(dirs))
+        if manifest is None:
+            _log("FAIL-CLOSED: manifest build failed")
+            self._ui_status("ERROR: Manifest build failed (fail-closed)")
+            app.pipeline_running = False
+            return
+
+        # Run evaluator on each book
+        from chinatxtbook.core.evaluator import GroupEvaluator
+        evaluator = GroupEvaluator(WORK_DIR)
+        prefiltered = []
+        for book in selected_books:
+            rd = book["path"]
+            base = book["name"]
+            # Get present files from workspace
+            present = SplitManifest.find_split_groups(WORK_DIR / rd)
+            expected = (manifest.get(rd) or {}).get(base)
+            ev = evaluator.evaluate(app.state, rd, base,
+                                     present.get(base), expected,
+                                     verify=True)
+            action = ev.get("action", "merge")
+            if action == "error":
+                _log(f"  SAFETY SKIP: {base} — {ev.get('detail','')[:80]}")
+            elif action == "skip":
+                _log(f"  ALREADY VERIFIED: {base}")
+                # Still include — will be skipped in merge
+                prefiltered.append(book)
+            else:
+                prefiltered.append(book)
+
+        if not prefiltered:
+            self._ui_status("All books skipped or blocked by safety checks")
+            app.pipeline_running = False
+            return
+
+        _log(f"Safety check: {len(prefiltered)}/{total} books passed")
+        selected_books = prefiltered
+        total = len(selected_books)
+
         self._ui_progress(50, "Merging")
 
         # Step 5: Merge/copy to output
@@ -245,9 +302,30 @@ class PipelineWorker:
                     src = sd / fn
                     tmp = od / f"{base}.tmp"
                     tmp.unlink(missing_ok=True)
-                    shutil.copy2(src, tmp)
+                    # Copy with SHA256 verification
+                    import hashlib as _hashlib
+                    h = _hashlib.sha256()
+                    with open(src, "rb") as fin, open(tmp, "wb") as fout:
+                        while True:
+                            chunk = fin.read(CHUNK_SIZE)
+                            if not chunk:
+                                break
+                            fout.write(chunk)
+                            h.update(chunk)
+                        fout.flush()
+                        os.fsync(fout.fileno())
+                    h2 = _hashlib.sha256()
+                    with open(tmp, "rb") as f:
+                        while True:
+                            chunk = f.read(CHUNK_SIZE)
+                            if not chunk:
+                                break
+                            h2.update(chunk)
+                    if h.hexdigest() != h2.hexdigest():
+                        tmp.unlink(missing_ok=True)
+                        raise IOError("SHA256 mismatch")
                     os.replace(str(tmp), str(of))
-                    _log(f"  OK [{i+1}/{total}]: {base} ({of.stat().st_size}B)")
+                    _log(f"  OK [{i+1}/{total}]: {base} ({of.stat().st_size}B, sha:{h.hexdigest()[:12]})")
                     ok_count += 1
                 else:
                     await self._merge(sd, od, base, parts)

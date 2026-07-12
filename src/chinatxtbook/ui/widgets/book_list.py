@@ -48,7 +48,7 @@ class BookListWidget(ListView):
         from chinatxtbook.core.manifest import SPLIT_RE
         from chinatxtbook.utils.format import fmt_size
 
-        all_files = git_client.ls_tree(dir_path, recursive=True)
+        all_files = git_client.ls_tree(dir_path, recursive=True) or []
         groups: dict = {}
         singles: dict = {}
 
@@ -118,14 +118,20 @@ class BookListWidget(ListView):
                 self._toggle_item(item, self.index)
 
     def on_list_view_selected(self, event: ListView.Selected) -> None:
-        """Enter/click: toggle selection via native ListView."""
+        """Enter/click: show detail overlay (design: Space=select, Enter=detail)."""
         if event.item is None:
             return
         try:
             idx = self.children.index(event.item)
         except ValueError:
             return
-        self._toggle_item(event.item, idx)
+        meta = self._book_meta.get(idx)
+        if meta:
+            app = self.app
+            if app and hasattr(app, 'push_screen'):
+                from chinatxtbook.ui.screens.detail_overlay import DetailOverlay
+                app.focused_book = meta
+                app.push_screen(DetailOverlay(book_data=meta))
         event.stop()
 
     def _toggle_item(self, item, idx: int) -> None:

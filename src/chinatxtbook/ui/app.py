@@ -111,17 +111,37 @@ class ChinaTextbookApp(App):
         self.push_screen(SearchOverlay())
 
     def action_select_all(self) -> None:
-        for bk in self._catalog_books:
-            self.selected_keys.add(bk.get("key", ""))
-        self.estimated_size = sum(b.get("size", 0) for b in self._catalog_books)
-        self._update_status_bar()
-        self.notify(f"已全选 {len(self._catalog_books)} 册教材")
+        # Select books currently visible in the center list (current scope)
+        try:
+            book_list = self.screen.query_one("#book-list")
+            visible = set(book_list._all_groups.keys())
+            self.selected_keys.update(visible)
+            self.estimated_size = sum(
+                b.get("size", 0) for b in self._catalog_books
+                if b.get("key") in self.selected_keys
+            )
+            self._update_status_bar()
+            self.notify(f"已选当前视图 {len(visible)} 册")
+        except Exception:
+            self.notify("无法确定当前视图范围", severity="warning")
 
     def action_deselect_all(self) -> None:
-        self.selected_keys.clear()
-        self.estimated_size = 0
-        self._update_status_bar()
-        self.notify("已取消全部选择")
+        # Deselect only books in current scope (visible in center list)
+        try:
+            book_list = self.screen.query_one("#book-list")
+            visible = set(book_list._all_groups.keys())
+            self.selected_keys.difference_update(visible)
+            self.estimated_size = sum(
+                b.get("size", 0) for b in self._catalog_books
+                if b.get("key") in self.selected_keys
+            )
+            self._update_status_bar()
+            self.notify(f"已取消当前视图选择")
+        except Exception:
+            self.selected_keys.clear()
+            self.estimated_size = 0
+            self._update_status_bar()
+            self.notify("已取消全部选择")
 
     def action_show_help(self) -> None:
         self.push_screen(HelpScreen())
@@ -252,7 +272,11 @@ class ChinaTextbookApp(App):
 
     def action_quit_app(self) -> None:
         if self.pipeline_running:
-            self.notify("有任务在运行，再次按 Q 强制退出", severity="warning")
+            if not hasattr(self, '_quit_warned') or not self._quit_warned:
+                self._quit_warned = True
+                self.notify("有任务在运行，再次按 Q 强制退出", severity="warning")
+            else:
+                self.exit()
         else:
             self.exit()
 

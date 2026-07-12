@@ -125,8 +125,9 @@ class GitClient:
         ok, out, _ = self.run(["remote", "get-url", "origin"], retry=1)
         return out.strip() if ok else None
 
-    def ls_tree(self, path_prefix: str = "", recursive: bool = False) -> list:
-        """List files in git tree. Source: v1.0 lines 385-392, 1249-1253."""
+    def ls_tree(self, path_prefix: str = "", recursive: bool = False):
+        """List files in git tree. Returns None on git failure, [] on empty.
+        Source: v1.0 lines 385-392, 1249-1253."""
         args = ["ls-tree"]
         if recursive:
             args.append("-r")
@@ -135,7 +136,7 @@ class GitClient:
             args.extend(["--", path_prefix])
         ok, out, _ = self.run(args, retry=1)
         if not ok:
-            return []
+            return None  # fail-closed: distinguish error from empty
         return [line.strip() for line in out.strip().split("\n") if line.strip()]
 
     def path_exists_in_tree(self, path: str) -> bool:

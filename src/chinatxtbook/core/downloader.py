@@ -82,7 +82,7 @@ class DownloadOrchestrator:
         all_ok = True
         for p in selected:
             d = WORK_DIR / p.rstrip("/")
-            tree_files = self.git.ls_tree(p, recursive=True)
+            tree_files = self.git.ls_tree(p, recursive=True) or []
             if not d.exists():
                 self.log(
                     f"  {p.rstrip('/')}: 检出后目录不存在"
@@ -131,10 +131,17 @@ class DownloadOrchestrator:
 
         # Build manifest from git tree (authoritative).
         # Fail-closed: if git tree can't be read, stop entirely.
-        ls_out = "\n".join(
-            self.git.ls_tree(p, recursive=True) for p in selected
-        )
-        manifest = SplitManifest.build_expected_manifest(ls_out, selected)
+        all_files = []
+        for p in selected:
+            result = self.git.ls_tree(p, recursive=True)
+            if result is None:
+                self.log(
+                    f"无法读取 Git 树清单 ({p})，为避免生成不完整 PDF，停止处理",
+                    "ERROR",
+                )
+                return False
+            all_files.extend(result)
+        manifest = SplitManifest.build_expected_manifest("\n".join(all_files), selected)
         if manifest is None:
             self.log(
                 "无法读取 Git 树清单，为避免生成不完整 PDF，停止处理",

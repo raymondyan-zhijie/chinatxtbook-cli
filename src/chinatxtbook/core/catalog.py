@@ -155,7 +155,7 @@ class CatalogBuilder:
         if grade:
             path = f"{stage}/{subject}/{grade}"
 
-        files = self.git.ls_tree(path, recursive=True)
+        files = self.git.ls_tree(path, recursive=True) or []
 
         # Group split files by base name
         books: dict[str, BookEntry] = {}

@@ -53,9 +53,10 @@ class TestSplitManifest:
         assert "小学/数学" in manifest
 
     def test_build_manifest_empty(self):
-        # Empty output (git failure) returns None (fail-closed)
+        # Empty string now returns None (fail-closed: git failure indistinguishable
+        # from empty ls-tree output, so we fail-safe)
         manifest = SplitManifest.build_expected_manifest("", [])
-        assert manifest == {}  # Empty string yields empty dict, not None
+        assert manifest is None
 
     def test_missing_parts(self):
         assert SplitManifest.missing_parts([1, 3, 5]) == [2, 4]
