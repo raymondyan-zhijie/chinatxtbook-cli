@@ -108,16 +108,18 @@ class PdfMerger:
         verify: bool = True,
         clean_intent: bool = False,
         progress: Optional[ProgressTracker] = None,
+        output_dir: Optional[Path] = None,
     ) -> tuple:
         """Merge split PDF parts into a single file.
 
         Args:
-            rel_dir: Relative directory within work_dir.
+            rel_dir: Relative directory within work_dir for SOURCE files.
             base: Output PDF filename (e.g. "语文一年级上册.pdf").
             parts_map: {idx: filename} dict of split parts.
             verify: Enable hash verification.
             clean_intent: Force re-read verification (--clean).
             progress: Optional progress tracker.
+            output_dir: If set, output goes here instead of work_dir/rel_dir.
 
         Returns:
             (status, size, sha256_or_none, detail)
@@ -125,9 +127,11 @@ class PdfMerger:
 
         Source: v1.0 lines 890-976.
         """
-        dir_path = self.work_dir / rel_dir
-        out_path = dir_path / base
-        tmp_path = dir_path / f"{base}.tmp"
+        source_dir = self.work_dir / rel_dir
+        out_dir = output_dir or source_dir
+        out_dir.mkdir(parents=True, exist_ok=True)
+        out_path = out_dir / base
+        tmp_path = out_dir / f"{base}.tmp"
         key = str(out_path)
         written = 0
         must_verify = verify or clean_intent
@@ -137,10 +141,10 @@ class PdfMerger:
             # Source: v1.0 lines 908-915
             if out_path.exists() and out_path.stat().st_size > 0 and must_verify:
                 expected = sum(
-                    (dir_path / parts_map[i]).stat().st_size for i in parts_map
+                    (source_dir / parts_map[i]).stat().st_size for i in parts_map
                 )
                 if out_path.stat().st_size == expected:
-                    ph = hash_parts(dir_path, parts_map)
+                    ph = hash_parts(source_dir, parts_map)
                     oh = hash_file(out_path).hexdigest()
                     if ph == oh:
                         return "skipped", out_path.stat().st_size, oh, "verified"
@@ -155,7 +159,7 @@ class PdfMerger:
                 for idx in sorted(parts_map):
                     if is_interrupted():
                         raise InterruptedError
-                    part_path = dir_path / parts_map[idx]
+                    part_path = source_dir / parts_map[idx]
                     expected_size += part_path.stat().st_size
                     with open(part_path, "rb") as in_f:
                         while True:
@@ -203,7 +207,7 @@ class PdfMerger:
             # ── POSIX: fsync parent directory ──
             if os.name == "posix":
                 try:
-                    dfd = os.open(str(dir_path), os.O_RDONLY)
+                    dfd = os.open(str(out_dir), os.O_RDONLY)
                     try:
                         os.fsync(dfd)
                     finally:

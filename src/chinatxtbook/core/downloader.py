@@ -195,6 +195,7 @@ class DownloadOrchestrator:
         dry_run: bool = False,
         workers: int = DEFAULT_WORKERS,
         verify: bool = True,
+        output_dir=None,
     ) -> bool:
         """Merge split PDFs with hash verification. Source: v1.0 lines 1339-1493."""
         self.log("━━━ STEP 4: 核对与合并 ━━━", "STEP")
@@ -302,6 +303,7 @@ class DownloadOrchestrator:
             status, size, digest, detail = self.merger.merge(
                 rel_dir, base, parts_map,
                 verify=verify, clean_intent=clean, progress=progress,
+                output_dir=output_dir / rel_dir if output_dir else None,
             )
             if clean and (
                 status == "ok" or (status == "skipped" and detail == "verified")

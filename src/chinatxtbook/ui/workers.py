@@ -101,9 +101,24 @@ class PipelineWorker:
 
         # Sparse checkout (git needs trailing / for directories)
         checkout_paths = [p + "/" for p in selected_paths]
-        _status(f"📥 检出 {len(checkout_paths)} 个目录...")
-        await asyncio.to_thread(git.sparse_checkout, checkout_paths)
-        await asyncio.to_thread(git.checkout, branch)
+        _status(f"📥 下载 {len(checkout_paths)} 个目录 (可能需要几分钟)...")
+
+        try:
+            # Set sparse-checkout rules
+            await asyncio.to_thread(git.sparse_checkout, checkout_paths)
+            # Checkout triggers blob fetching (can be slow on first run)
+            await asyncio.wait_for(
+                asyncio.to_thread(git.checkout, branch),
+                timeout=300  # 5 min timeout
+            )
+        except asyncio.TimeoutError:
+            _status("❌ 下载超时 (5分钟) — 请检查网络后重试")
+            app.pipeline_running = False
+            return
+        except Exception as e:
+            _status(f"❌ 下载失败: {str(e)[:60]}")
+            app.pipeline_running = False
+            return
 
         _progress(50, "Downloading")
 
@@ -150,6 +165,7 @@ class PipelineWorker:
             state, manifest,
             clean=False, dry_run=False,
             workers=DEFAULT_WORKERS, verify=True,
+            output_dir=OUTPUT_DIR,
         )
 
         _progress(95, "Verifying")
