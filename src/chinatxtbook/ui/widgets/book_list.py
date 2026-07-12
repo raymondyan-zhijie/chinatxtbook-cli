@@ -15,10 +15,6 @@ from chinatxtbook.utils.format import fmt_size
 class BookListWidget(DataTable):
     """Center panel: files in selected directory."""
 
-    BINDINGS = [
-        Binding("space", "toggle_select", "选择", show=False),
-    ]
-
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._current_path: str = ""
@@ -81,21 +77,23 @@ class BookListWidget(DataTable):
             self.add_row("⬜", name, "1卷", fmt_size(sz) if sz else "?")
 
         if not groups and not singles:
-            from textual.widgets import Static
             self.add_row("", "展开到底层目录查看教材文件", "", "")
 
     # ── Selection ────────────────────────────────────────────
 
-    def action_toggle_select(self) -> None:
+    def key_space(self) -> None:
         """Space: toggle selection of current row."""
         row_key = self.cursor_row
-        if row_key is not None and row_key >= 0:
-            self._do_toggle(row_key)
+        if row_key is None:
+            return
+        self._do_toggle(row_key)
+        # Confirm toggle with a brief notification
+        if hasattr(self, 'app') and hasattr(self.app, 'notify'):
+            pass  # Notifications are too noisy for every Space press
 
     def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
-        """Enter/click: also toggle selection."""
-        if event.row_key is not None:
-            self._do_toggle(event.row_key)
+        """Enter/click: toggle selection."""
+        self._do_toggle(event.row_key)
 
     def _do_toggle(self, row_key) -> None:
         """Toggle checkmark and notify app."""
