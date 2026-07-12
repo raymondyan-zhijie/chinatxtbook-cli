@@ -93,7 +93,11 @@ class ChinaTextbookApp(App):
             book_list = screen.query_one("#book-list")
             size_cache = (self.state.get("size_cache") or {}).get("files", {})
             book_list.load_directory(self.git_client, dir_path, size_cache)
-            self._catalog_books = list(book_list._all_groups.values())
+            # Merge (don't overwrite): accumulate books from ALL visited directories
+            merged = {b["key"]: b for b in self._catalog_books}
+            for b in book_list._all_groups.values():
+                merged[b["key"]] = b
+            self._catalog_books = list(merged.values())
         except Exception:
             pass
 
@@ -144,6 +148,12 @@ class ChinaTextbookApp(App):
         if not confirmed:
             return
         selected = [b for b in self._catalog_books if b.get("key") in self.selected_keys]
+        if not selected:
+            self.notify(
+                "未找到选中教材的元数据。请重新选择教材后再试。",
+                severity="error",
+            )
+            return
         self.notify(f"开始下载 {len(selected)} 册...", severity="information")
         self.pipeline_running = True
         from chinatxtbook.ui.workers import PipelineWorker
