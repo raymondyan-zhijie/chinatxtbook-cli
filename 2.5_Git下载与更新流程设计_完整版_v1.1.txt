@@ -1,0 +1,811 @@
+
+===== D:\TextBook\2.5_Git下载与更新流程设计_完整版_v1.1.docx =====
+ChinaTextbook v1.1
+第二批交付 2.5
+Git、下载与更新流程设计
+文档版本：1.0产品版本：ChinaTextbook v1.1状态：开发基线 / Architecture Review日期：2026-07-12
+核心原则：官方 GitHub 单源；书目选择映射到精确 Git 文件路径；下载、合并、验证和状态持久化组成一个可恢复事务；任何不能证明安全的情况均停止处理。
+文档控制
+项目
+内容
+文档编号
+CTB-SDS-2.5
+适用版本
+ChinaTextbook v1.1
+目标读者
+技术负责人、Python 开发、测试、发布维护人员
+前置文档
+2.2《模块设计说明》、2.3《数据模型与状态文件设计》、2.4《状态机与异常恢复设计》
+交付范围
+仅 Word；图表已嵌入文档
+冻结状态
+除明确标注“可配置”外，本文件中的流程和安全边界为 v1.1 开发基线
+修订记录
+版本
+日期
+说明
+1.0
+2026-07-12
+首次完整交付；冻结 Git、下载、教材更新和软件更新流程
+目录
+1. 目的、范围与设计结论
+2. 外部系统与固定约束
+3. 仓库、工作区与输出区模型
+4. Git 能力检测和仓库初始化
+5. 目录快照与书目索引刷新
+6. 精确文件选择与 sparse-checkout 设计
+7. 下载计划与预检
+8. 下载事务和文件发布
+9. 进度、速度与剩余时间
+10. 重试、超时、取消和恢复
+11. PDF 合并、校验与清理的衔接
+12. 教材仓库更新检测
+13. 已选教材更新流程
+14. 软件版本更新提示
+15. GitHub API、缓存与限流
+16. 并发、锁和多实例
+17. 安全、隐私与完整性边界
+18. 错误码与用户提示
+19. 日志与诊断
+20. 接口、命令和伪代码规范
+21. 测试与验收标准
+附录 A. Git 命令基线
+附录 B. 稀疏规则示例
+附录 C. 参考资料
+1. 目的、范围与设计结论
+本文档规定 ChinaTextbook v1.1 如何从唯一官方仓库发现教材、把用户选中的“书”解析为精确源文件、按需获取文件、合并与验证 PDF、检测教材变化，并提示软件新版本。它不重新定义 2.3 的数据字段或 2.4 的状态机，而是说明这些模型和状态在 Git 与网络 I/O 中如何落地。
+1.1 纳入范围
+官方仓库发现、首次克隆、fetch、工作区校验与修复。
+基于固定 commit 的目录快照、书目聚合和文件大小信息。
+selected_books 到 selected_files 的精确映射及下载计划冻结。
+部分克隆、精确文件 sparse-checkout、按需 blob 获取与工作区验证。
+下载暂存、分卷合并、SHA256 验证、原子发布和状态持久化。
+教材仓库更新检测、差异分类、已选教材更新。
+通过 GitHub Releases 进行软件版本提示；v1.1 不自动覆盖程序。
+1.2 不纳入范围
+多镜像测速、Gitee 或用户自定义下载源。
+Git 提交、推送、合并、rebase、分支开发等写入上游仓库的操作。
+静默自动升级 EXE 或 Python 包。
+基于文件名猜测出版社、ISBN、发布日期等不可靠元数据。
+1.3 冻结的关键结论
+编号
+结论
+理由
+D-01
+仓库固定为 https://github.com/TapXWorld/ChinaTextbook.git
+避免镜像不一致和信任边界扩散
+D-02
+所有目录和下载计划绑定具体 commit SHA
+避免目录浏览与实际下载处于不同版本
+D-03
+用户选择单位为 Book；Git 操作单位为 SourceFile 精确路径
+分离产品语义和存储实现
+D-04
+工作区、暂存区和输出区物理隔离
+Git 变更不得直接覆盖用户成品
+D-05
+下载完成必须满足：源文件核对、PDF 处理、SHA256、原子发布和状态保存
+进度 100% 不能作为完成证据
+D-06
+v1.1 仅提示软件更新，不自动替换程序
+降低跨平台升级和供应链风险
+图 1  总体数据流与持久化边界
+2. 外部系统与固定约束
+2.1 外部依赖
+依赖
+最低要求/基线
+用途
+不可用时
+Git
+2.27+；启动时读取实际版本
+部分克隆、fetch、tree、sparse-checkout
+阻止下载；仍可浏览有效缓存和已下载文件
+GitHub Git 服务
+公开 HTTPS 仓库
+clone、fetch、按需 blob
+使用缓存；下载任务失败并可重试
+GitHub REST API
+版本化请求头；当前基线 2026-03-10
+Tree 元数据、commit compare、latest release
+退回本地 Git 能力或显示“暂不可检查”
+本地文件系统
+支持原子 replace 的普通本地卷优先
+工作区、暂存区、输出、状态
+不支持时阻止危险发布并提示更换目录
+2.2 单源信任模型
+软件只接受预置的 HTTPS 官方 URL。任何已有工作区在使用前都必须验证 origin URL 的标准化结果与预置 URL 一致；不一致时进入安全模式，不自动修改到“看起来相近”的地址。重定向只能由 Git/HTTPS 层处理，日志中记录最终主机但不记录认证参数。
+禁止：不得保留 v1.0 的镜像测速、最快源选择、Gitee 分支或 --use-gitee 等入口。配置文件中出现旧字段时迁移器应忽略并记录迁移说明。
+2.3 Git 特性现实约束
+Git 的 partial clone 可在 clone/fetch 阶段省略不需要的对象，缺失 blob 在实际需要时按需获取。Sparse checkout 控制工作树出现哪些路径。二者作用不同，v1.1 同时使用：partial clone 降低初始对象传输，sparse checkout 限制工作树。
+精确文件选择要求 non-cone pattern 模式；Git 官方文档已将 non-cone 标为弃用并建议使用 cone mode。由于 cone mode 只能以目录为选择单位，v1.1 将 non-cone 作为受控例外：模式由程序生成、通过 stdin 传递、工作区只读、禁止 merge/rebase/pull、禁用 sparse-index、限制模式数量，并在每次检出后进行集合级验证。该风险必须进入 ADR 和回归测试。
+3. 仓库、工作区与输出区模型
+3.1 目录布局
+<app-data>/├── workspace/                 # 只读 Git 工作区，允许随选择变化│   └── .git/├── staging/│   └── <task_id>/             # 当前任务独占的暂存材料│       ├── source/│       ├── merged/│       └── manifest.json├── output/                    # 用户成品，不由 sparse-checkout 管理│   └── <school>/<subject>/<grade>/...pdf├── cache/│   └── catalog-<commit>.json├── state/│   ├── app-state.json│   ├── app-state.json.bak│   └── app.lock└── logs/
+3.2 区域所有权
+区域
+所有者
+可被何种操作修改
+数据承诺
+workspace
+GitClient / RepositoryService
+clone、fetch、sparse set、checkout、repair
+可重建；不得存放用户唯一副本
+staging/<task_id>
+DownloadService / Merger / Verifier
+当前任务
+未完成材料；必须可判定是否安全清理
+output
+Publisher / OutputService
+仅原子发布、显式重新下载
+已验证成品优先保留
+cache
+CatalogService
+按 commit 写入、过期或损坏重建
+不作为完成或删除证据
+state
+StateStore
+锁内原子替换
+任务、Group 和验证结果的权威记录
+3.3 Commit 身份
+任何目录快照、Book、SourceFile、DownloadPlan 和 UpdateSummary 都必须携带 commit SHA。计划开始后，即使远端 HEAD 更新，当前任务仍在原 commit 上执行；新 HEAD 只能触发新的目录刷新或更新任务，不能“热切换”正在运行的下载。
+4. Git 能力检测和仓库初始化
+4.1 启动能力检测
+1. 执行 git --version，解析主、次版本；低于 2.27 阻止下载和更新。
+2. 检查 git 可执行文件路径，诊断报告记录路径和版本。
+3. 验证工作区父目录可写、剩余空间、路径长度与临时文件原子替换能力。
+4. 获取进程锁；第二实例不得进入写模式。
+5. 如果工作区存在，验证 .git、origin URL、partial clone 配置和当前 HEAD。
+4.2 默认分支发现
+默认分支不得硬编码为 main 或 master。初始化时使用 Git 协议查询远端符号引用：
+git ls-remote --symref https://github.com/TapXWorld/ChinaTextbook.git HEAD
+解析 ref: refs/heads/<branch> HEAD 与后续 HEAD SHA。解析失败时可使用 GitHub repository metadata 作为后备；两者均失败则不创建仓库。
+4.3 首次克隆
+git clone \  --filter=blob:none \  --no-checkout \  --single-branch \  --branch <default_branch> \  https://github.com/TapXWorld/ChinaTextbook.git \  <workspace>
+不使用 shell=True；命令及参数以数组传递。blob:none 使 blob 在真正需要时才按需获取。v1.1 不默认使用 shallow clone，以免更新比较、恢复和历史 commit 可达性变复杂；后续性能数据证明必要时可单独评审。
+图 2  首次初始化流程
+4.4 初始化后验证
+git rev-parse --is-inside-work-tree 必须为 true。
+git remote get-url origin 的规范化结果必须等于官方 URL。
+extensions.partialClone 或 remote.origin.promisor / partialclonefilter 与预期一致。
+HEAD、远端默认分支和 catalog commit 均为 40/64 位十六进制 Git object ID 的可接受形式；实现不得假定永远是 SHA-1 长度。
+工作区内不允许用户自定义 hook、submodule 自动初始化或额外 remote。
+5. 目录快照与书目索引刷新
+5.1 快照生成原则
+目录快照必须来自单一 commit，不得边分页边跟随移动的分支引用。流程先解析远端 HEAD 为 commit，再以该 commit 获取完整树。快照中至少记录 path、object type、blob SHA、size（可用时）、commit、获取时间和 truncated 标志。
+5.2 数据源优先级
+顺序
+方式
+用途
+限制与处理
+1
+GitHub Git Trees API（递归）
+一次获得 path、blob SHA 和 size
+如果 truncated=true，必须转为逐子树读取；禁止把截断结果当完整目录
+2
+本地 git ls-tree -r -z <commit>
+API 不可用时获得精确路径和 object ID
+blob size 可能未知；UI 显示“待获取”或使用有效缓存
+3
+有效 catalog cache
+离线浏览
+只能代表其 commit；不得用于不同 commit 的下载计划
+5.3 API 请求规范
+GET /repos/TapXWorld/ChinaTextbook/git/trees/<commit>?recursive=1Accept: application/vnd.github+jsonX-GitHub-Api-Version: 2026-03-10User-Agent: ChinaTextbook/<app-version>If-None-Match: <cached-etag>              # 有缓存时
+API 版本号应集中配置并附带兼容测试，不散落在业务代码中。公开资源默认无需用户 token；如未来支持 token，只能从安全凭据存储读取并严格脱敏。
+5.4 Book 聚合
+普通 *.pdf 映射为一个 Book，source_files 只有一个。
+同一路径基名的 *.pdf.1、*.pdf.2……按连续数字排序并聚合为一个 Book。
+只存在 .pdf.2 而无 .pdf.1、编号断裂、同时出现完整 PDF 与分卷冲突等情况标为 catalog anomaly，不自动选择。
+Book ID 由稳定分类路径、逻辑 PDF 基名和规范化大小写策略生成，不由列表序号生成。
+书目聚合后计算 catalog fingerprint，供缓存、迁移和测试使用。
+5.5 快照验收
+检查
+失败行为
+API response truncated 且未完成子树补读
+目录刷新失败，保留旧缓存
+重复规范化路径或大小写冲突
+标记异常，相关 Book 不可下载
+路径含 NUL、换行、绝对路径、.. 段
+拒绝整个异常条目并记录安全告警
+对象类型不是 blob/tree 或 symlink/submodule
+不作为教材源文件
+commit 在刷新过程中变化
+继续使用已固定 commit，不混合结果
+6. 精确文件选择与 sparse-checkout 设计
+6.1 选择映射
+SelectionService 以 selected_books 为用户状态，以 selected_files 为执行状态。每次启动下载前都必须从当前 catalog snapshot 重新解析 Book → SourceFile，排序去重后生成 selection_fingerprint。旧状态中的目录选择不参与此过程。
+6.2 路径规范化与拒绝规则
+规则
+要求
+编码
+内部使用 Unicode 字符串；传给 Git 使用操作系统参数/UTF-8 stdin；不得经 shell 拼接
+分隔符
+Git path 始终使用 /；本地路径只在 WorkspaceAdapter 边界转换
+边界
+必须是相对仓库根路径；拒绝绝对路径、盘符、UNC、空段、. 和 .. 段
+控制字符
+拒绝 NUL 和 CR/LF；不支持此类 Git 文件名
+目录证据
+精确 path 必须存在于计划 commit 的 catalog snapshot，blob SHA 必须匹配
+特殊模式字符
+对 !、#、*、?、[、]、\ 按 gitignore pattern 语法转义，并使用根锚定 /
+6.3 受控 non-cone 策略
+# patterns 由程序生成并通过 stdin 传入# 每一条都是根锚定、转义后的“精确文件”模式/小学/数学/一年级/教材A.pdf/初中/物理/八年级/教材B.pdf.1/初中/物理/八年级/教材B.pdf.2# 执行 git -C <workspace> sparse-checkout set \   --no-cone --no-sparse-index --stdin
+这里的换行仅用于说明；实际调用不包含 shell 续行。由于 non-cone 已被 Git 官方弃用，实现必须将其封装在 ExactMaterializer 接口后，禁止其他模块依赖具体命令。
+受控风险：non-cone 的性能约为模式数 × index 路径数，且模式语义容易出错。v1.1 限定一次计划最多 2,000 个源文件；超过上限拆批或拒绝。每次 set 之后必须运行规则验证和实际文件集合验证。
+6.4 检出顺序
+1. 确认工作区无未跟踪业务文件、无用户修改、无冲突和锁文件。
+2. fetch 目标 commit 与 tree；不直接 pull。
+3. 写入精确 pattern，并使用 check-rules 验证所有 selected_files 均匹配。
+4. checkout --detach <plan_commit>，使缺失 blob 通过 promisor remote 按需获取。
+5. 枚举工作区中教材候选文件；实际集合必须等于计划集合，不允许同目录多下载其他 PDF。
+6. 对每个文件核对路径、blob identity（可验证时）和预期大小；不一致则失败。
+图 3  精确文件稀疏检出及受控例外
+6.5 可替换实现
+ExactMaterializer 接口应允许未来将实现替换为“按 commit:path 逐 blob 物化到暂存区”，不改变 Book、DownloadPlan、Task 或 UI。触发替换评审的条件包括：Git 删除 non-cone 支持、目标仓库规模导致性能不可接受、或跨平台规则匹配出现不可消除差异。
+7. 下载计划与预检
+7.1 DownloadPlan 冻结字段
+字段
+用途
+task_id
+任务唯一标识；重试必须新建
+repository_url
+必须为官方 URL
+branch / commit
+浏览版本和执行版本
+selected_book_ids
+用户语义和报告
+selected_files
+精确 Git path、blob SHA、size（若已知）
+selection_fingerprint
+选中文件规范列表的 SHA256
+output_mapping
+每个 Book 的最终输出路径
+clean_policy
+是否在成功验证后删除暂存分卷
+space_budget
+预计下载、暂存、合并、发布和安全余量
+created_at / catalog_fingerprint
+审计与防止快照错配
+7.2 磁盘空间预算
+预检按最坏并行存在计算，不只看下载体积。建议公式：
+required = missing_source_bytes + merge_temp_bytes + publish_temp_bytes + state_margin + 10% safety_margin
+完整 PDF 的 merge_temp_bytes 为 0；分卷教材按分卷总和估算合并临时文件。size 未知时，不能显示伪精确值；采用保守默认或要求用户确认，并在执行中持续复核剩余空间。
+7.3 预检清单
+类别
+检查
+失败结果
+计划
+catalog commit 与 plan commit 一致；fingerprint 可重算
+重新生成计划
+仓库
+origin、HEAD、Git 状态、partial clone 配置
+修复或重建工作区
+文件
+selected_files 都在 catalog；无 anomaly
+阻止受影响教材
+输出
+路径在 output 根内；目标没有被其他任务占用
+失败并提示冲突
+空间
+满足最坏预算
+失败，提示所需与可用空间
+状态
+进程锁有效；state 可读写并通过 Schema
+进入安全模式
+网络
+仅进行轻量连通性/Git 请求，不做镜像测速
+暂时性错误按策略重试
+8. 下载事务和文件发布
+8.1 事务边界
+一个下载任务可以包含多本书，但每本 Book 具有独立的处理结果；任务总体完成要求所有计划 Book 均进入 ready 或被明确记录为失败/跳过。默认采用“逐书提交”：一本书验证和发布成功后立即持久化，后续书失败不回滚已成功书。
+8.2 标准流程
+1. 冻结 plan，写 Task=pending；Worker 启动后转 running/preflight。
+2. fetch 目标 commit；必要时刷新 promisor objects。
+3. 应用 exact sparse rules 并 checkout 固定 commit。
+4. 把精确源文件复制/硬链接（仅确认同卷安全时）到 task staging/source；记录 staging manifest。
+5. 普通 PDF 直接进入验证准备；分卷 PDF 按 2.3 中 parts 顺序合并到 staging/merged/<name>.tmp。
+6. 计算 SHA256，并执行 PDF 基础可读性/尾部标记检查；不得仅以扩展名判断。
+7. 将最终候选写到 output 同目录的临时文件或同卷临时名，fsync 后 os.replace 原子发布。
+8. 在锁内保存 Group、Verification、Book local status 和 Task progress。
+9. 只有状态保存成功后，Book 才向 UI 发布 ready；任务最后进入 persist/done/completed。
+图 4  下载、处理、验证与发布事务
+8.3 旧输出保护
+目标已存在且状态为 ready 时，新任务先写新的临时候选，不覆盖旧文件。
+新候选 SHA256、PDF 验证或状态保存失败，旧成品保持不动。
+原子 replace 成功但状态保存失败时，启动恢复器根据文件真实哈希和计划证据校正，不直接宣布完成。
+用户显式“重新下载”不等于先删除；替换仍采用先验证新候选、后原子发布。
+8.4 单文件与分卷
+类型
+源文件
+处理
+完成证据
+完整 PDF
+*.pdf
+复制到候选、验证、原子发布
+输出大小、SHA256、PDF 检查、状态写入
+分卷 PDF
+*.pdf.1…N
+按连续序号流式合并到临时 PDF
+parts 清单、每份源大小/可选 hash、合并输出 SHA256、PDF 检查
+异常分卷
+缺 1、断号、重复或冲突
+不处理
+Catalog anomaly + fail-closed
+9. 进度、速度与剩余时间
+9.1 进度层级
+层级
+计算方式
+展示要求
+总体任务
+按已知字节权重；未知项使用阶段权重并标为估算
+显示已完成书数与估算百分比
+当前 Book
+checkout/copy/merge/verify/publish 阶段进度
+显示当前阶段和教材名
+Git 网络
+解析 git --progress stderr 的 receiving/resolving 信息
+明确“Git 进度为估算”
+合并/哈希
+已处理字节 / 总字节
+可以精确
+更新检查
+步骤式，不伪造百分比
+显示“获取远端信息/比较/生成摘要”
+9.2 速度与 ETA
+速度使用滑动窗口，过滤启动尖峰；ETA 仅在连续获得足够样本且总量已知时显示。Git 的 receiving objects 与按需 blob fetch 可能分多次发生，不能把一次 Git 百分比等同于整个任务百分比。
+9.3 消息节流
+Worker 可以高频采样，但向 Textual UI 发布进度最多 10 次/秒，状态持久化最多 1 次/秒或在阶段切换时强制保存。错误、取消、安全点和 Book 完成事件不得被节流丢弃。
+10. 重试、超时、取消和恢复
+10.1 重试分类
+类别
+示例
+自动重试
+要求
+暂时性网络
+连接重置、502/503/504、Git transport transient
+最多 3 次，1s/3s/9s + 抖动
+不得重新生成 commit 或计划
+API 限流
+403/429 且有 rate/reset 信息
+等待 reset 或转本地 Git/缓存
+不循环请求
+完整性
+hash mismatch、上游删卷、路径集合不一致
+不自动重试覆盖
+fail-closed，保留旧输出
+环境
+空间不足、权限、路径长度、Git 锁
+不盲目自动重试
+给出明确修复动作
+内部
+未分类异常、状态不变量破坏
+不自动继续
+失败、诊断导出
+10.2 超时
+区分连接超时、无输出超时和总任务上限；大文件下载不应因总耗时长而误杀，只在长期无进展且无磁盘写入时判断卡死。
+Git 子进程 stdout/stderr 必须持续消费，防止管道填满。
+超时先发送温和终止，等待宽限期，再终止子进程树；不得杀死 Python UI 线程。
+超时后检查 .git/index.lock、shallow.lock、临时 pack 等材料，只有证明安全才自动清理。
+10.3 用户取消
+取消遵循 2.4：running → cancelling，停止领取新 Book，在 Git 子进程结束、文件块边界、合并输出关闭、哈希轮次结束或原子事务边界处转 cancelled。已经验证并发布的 Book 不因取消其他 Book 而删除。
+10.4 崩溃恢复
+1. 启动时取得锁并读取 state；旧 pending/running/cancelling 任务改为 interrupted。
+2. 扫描 staging manifest，只处理带 task_id、plan fingerprint 和安全边界标记的目录。
+3. 如果最终输出已存在，按真实 SHA256 与计划证据判断 ready、stale 或 failed。
+4. 恢复操作创建新 task_id；旧任务只作历史记录。
+5. 无法判定临时文件归属时隔离或保留，不自动删除。
+图 5  失败分类、重试与恢复决策
+11. PDF 合并、校验与清理的衔接
+11.1 合并输入不可变
+Merger 只接受 DownloadPlan 固定的 parts 列表，不自行扫描目录猜测分卷。每个 part 必须在 staging manifest 中记录源 Git path、blob SHA、大小和本地路径。
+11.2 验证顺序
+1. 验证源集合与 parts 连续性。
+2. 流式合并到 .tmp，不在 output 直接拼接。
+3. 检查候选至少具有 PDF 头部/尾部和可读取的基本结构；具体库由实现选型决定。
+4. 计算候选 SHA256 和大小。
+5. 原子发布后可选重读 SHA256；高安全模式必须重读。
+6. 保存 Group hash、size、parts、verified_at 和 source commit。
+11.3 clean 规则
+clean 仅作用于当前 task staging 中已登记的分卷，不作用于 Git 工作区以外的未知文件。
+只有最终输出已验证且状态保存成功，才允许删除 staging 分卷。
+--skip-verify 时不得执行 clean；UI 必须显示风险。
+Git sparse-checkout 自己移除工作区文件不等同于 clean，不影响输出和历史 Group 记录。
+12. 教材仓库更新检测
+12.1 检查触发
+用户按 F9 主动检查。
+启动后后台延迟检查；不得阻塞主界面。
+上次成功检查超过可配置间隔时检查；默认 24 小时。
+下载开始前只获取远端 HEAD，发现目录缓存落后时提示刷新，不强制改变当前计划。
+12.2 Commit 比较
+1. 读取 local_catalog_commit。
+2. 通过 git ls-remote 或轻量 fetch 获取 remote_head_commit。
+3. 相同则无更新。
+4. 不同则构建 remote catalog snapshot。
+5. 优先以 Book 快照进行语义比较；GitHub compare commits API 用作提交和文件变化辅助信息，不作为完整目录权威来源。
+GitHub compare endpoint 可提供 added、removed、modified、renamed 等文件状态，但大规模比较存在提交/分页限制；因此产品更新摘要最终以两个完整 catalog snapshot 的差异为准。
+图 6  教材仓库更新检测与差异分类
+12.3 Book 级差异规则
+变化类型
+判定
+用户意义
+新增
+new snapshot 有新 book_id
+可浏览和选择
+修改
+book_id 相同但任一源 blob SHA、size 或 parts 集合变化
+已下载版本可能过期
+重命名/移动
+源 blob 集合高度一致但路径/book_id 变化；辅以 Git rename 信息
+提示路径变化，不自动猜测为同一本除非规则确定
+删除
+旧 book_id 不在新快照
+本地成品保留并标记 upstream removed/stale
+结构变化
+完整 PDF ↔ 分卷、parts 数变化、断号或冲突
+必须人工可见；默认不自动覆盖
+分类变化
+学校/科目/年级路径变化
+导航位置更新；历史下载记录保留关联
+12.4 删除和结构变化
+Fail-closed：上游删除某分卷或从 N 卷变为更少卷时，不得将本地旧分卷误当作新版本的一部分，也不得删除旧完整 PDF。相关 Group 进入 stale，等待用户查看变化和显式更新。
+13. 已选教材更新流程
+13.1 更新范围
+“更新已选教材”以当前 selected_books 与新 catalog 为基础生成新的 DownloadPlan。只处理新增或修改的已选书；未变化且本地 Group 真实哈希有效的书直接跳过。
+13.2 更新决策
+本地状态
+上游状态
+默认动作
+未下载
+存在
+按新 commit 下载
+ready
+未变化
+跳过
+ready
+内容修改
+下载新候选，验证后原子替换
+ready
+删除
+保留本地，标记 upstream_removed
+ready
+结构变化
+显示高风险确认；不自动覆盖
+stale/failed
+存在
+生成新任务；仍保留可验证旧输出
+文件存在但无可信状态
+任意
+先验证/诊断，不自动覆盖
+13.3 更新中的版本隔离
+同一任务只能使用一个新 commit。旧 catalog 和新 catalog 均保留到 UpdateSummary 确认完成。若更新期间远端再次变化，本任务继续固定 commit，完成后可再次提示有更新。
+14. 软件版本更新提示
+14.1 数据源
+软件更新检查使用产品代码仓库的 GitHub “latest published full release” endpoint。该 endpoint 返回最新的非 draft、非 prerelease 版本；公开仓库可以匿名请求。应用必须发送 Accept、User-Agent 和版本化 API header。
+GET /repos/<software-owner>/<software-repo>/releases/latestAccept: application/vnd.github+jsonX-GitHub-Api-Version: 2026-03-10User-Agent: ChinaTextbook/<current-version>
+14.2 版本比较
+解析 tag 时接受可选 v 前缀，内部按语义版本比较。
+当前稳定版不被 prerelease 替代；用户使用 prerelease 构建时可在开发设置中采用单独渠道。
+版本字符串异常时只显示“发现无法解析的 Release”，不判断新旧。
+忽略版本按 exact tag 保存；更高版本仍可提示。
+14.3 提示与操作
+操作
+行为
+查看更新
+显示 release name、精简 release notes、发布时间和官方页面
+稍后提醒
+本次会话或可配置时间内不再提示
+忽略此版本
+保存 ignored_release_tag
+打开下载页
+使用系统浏览器打开官方 Release 页面
+自动安装
+v1.1 不支持
+图 7  软件版本更新提示流程
+15. GitHub API、缓存与限流
+15.1 API 客户端统一要求
+所有 REST 调用经 GitHubApiClient，不允许模块自行拼 URL。
+固定 Accept、API version、User-Agent；支持 ETag/If-None-Match。
+限制响应体大小、重定向次数和总时长；只接受 api.github.com 的预期 HTTPS。
+解析 JSON 前检查 status、Content-Type 和体积；错误正文截断并脱敏。
+404 latest release 解释为“尚无稳定 Release”，不是应用故障。
+15.2 缓存
+缓存
+键
+有效性
+损坏处理
+catalog
+repository + commit
+commit 不变即内容不可变
+删除并重建
+remote head
+repository + branch
+短 TTL，默认 5 分钟
+重新请求
+latest release
+software repository
+默认 12 小时，用户手动检查可强制
+重新请求
+compare summary
+base + head
+commit 对固定
+重新计算
+blob size
+commit + path + blob SHA
+对象不变即有效
+从 tree/API 重新获取
+15.3 限流
+读取响应头中的 remaining、reset、retry-after 等信息。达到限流后不进行高频重试：目录刷新优先退回本地 Git tree；软件更新显示“稍后再检查”；状态栏可以显示预计可重试时间。应用不要求用户提供 token 才能完成核心下载。
+15.4 API 版本升级
+GitHub REST API 使用日期版本。版本 header 必须是单一配置项，并在 CI 中对当前支持版本运行契约测试。收到 410 Gone 或 deprecation/sunset header 时记录高优先级警告，不静默改用无版本请求。
+16. 并发、锁和多实例
+16.1 并发模型
+资源
+并发规则
+Git workspace
+同一时间最多一个写操作：clone/fetch/sparse/checkout/repair
+下载计划
+可队列多个，但物化阶段串行；合并和验证可按资源限制并行
+同一 Book/output
+同一时间只能有一个任务占用
+StateStore
+单进程锁内串行原子写
+GitHub API
+全局并发不超过 2；尊重限流
+日志/UI
+线程安全队列；UI 只处理消息，不直接等待子进程
+16.2 多实例锁
+app.lock 记录 PID、启动时间、主机和随机实例 ID。获取失败时第二实例以只读/退出提示处理，不允许两个实例同时修改 workspace、state 或 output。陈旧锁只能在确认进程不存在且锁年龄、实例信息符合规则后由恢复器清除。
+16.3 任务优先级
+用户主动下载高于后台 catalog refresh 和软件更新检查。
+正在执行下载时，后台更新检查可以做轻量 API 请求，但不得触发 fetch/checkout。
+退出时先停止低优先级任务，再对下载执行安全取消。
+17. 安全、隐私与完整性边界
+17.1 路径与文件安全
+所有输出路径经 resolve 后必须仍位于 output 根目录；拒绝 symlink/junction 逃逸。
+仓库中的 symlink、submodule 和非普通 blob 不作为教材源。
+临时文件名由 task_id 与随机值生成，不使用不可信书名直接构造。
+Windows 保留名、尾随点/空格、路径长度和大小写冲突必须在计划期检测。
+删除只允许针对 manifest 中登记且位于 staging 根内的路径。
+17.2 网络和供应链
+固定官方 GitHub 主机和仓库；不执行仓库中的脚本、hook、LFS smudge 或 submodule。
+建议设置 GIT_LFS_SKIP_SMUDGE=1、禁用 credential prompt，并清理可影响行为的危险环境变量。
+软件更新只打开官方 Release 页面；v1.1 不下载和执行更新资产。
+API token（未来可选）不得进入命令行、日志、状态文件或诊断包。
+17.3 完整性证据优先级
+1. 最终文件的真实 SHA256 和大小。
+2. 计划 commit、精确 source path、blob SHA 和 parts 清单。
+3. 原子状态记录中的 Group/Verification。
+4. Catalog cache 和 UI 显示。
+低级证据不能覆盖高级证据。例如 UI 显示“完成”但文件 SHA256 不符，应以真实文件为准并转 stale/failed。
+18. 错误码与用户提示
+错误码
+场景
+用户提示摘要
+自动行为
+GIT_NOT_FOUND
+未安装或无法执行 Git
+未检测到 Git 2.27+
+阻止下载
+GIT_VERSION_UNSUPPORTED
+版本过低
+请升级 Git
+阻止下载
+REPOSITORY_ORIGIN_MISMATCH
+工作区不是官方仓库
+工作区来源不可信
+安全模式
+REMOTE_HEAD_UNAVAILABLE
+无法读取远端 HEAD
+暂时无法检查仓库版本
+有限重试/缓存
+TREE_TRUNCATED
+目录 API 返回截断且补读失败
+教材目录不完整，已保留旧目录
+保留缓存
+SPARSE_RULE_INVALID
+规则未覆盖精确文件
+无法安全准备所选教材
+失败
+CHECKOUT_SET_MISMATCH
+实际检出集合不同
+检出内容与计划不一致
+fail-closed
+BLOB_OR_SIZE_MISMATCH
+源文件身份/大小不一致
+源文件已变化或损坏
+失败
+GIT_NETWORK_TRANSIENT
+网络暂时中断
+连接中断，正在重试
+有限退避
+DISK_SPACE_INSUFFICIENT
+空间不足
+需要 X，当前可用 Y
+失败
+UPSTREAM_PART_REMOVED
+上游删卷/结构变化
+教材分卷结构已变化
+保留旧成品
+OUTPUT_HASH_MISMATCH
+最终哈希不符
+文件校验失败
+不覆盖旧文件
+STATE_WRITE_FAILED
+状态无法原子保存
+下载结果未能安全登记
+失败/恢复
+GITHUB_RATE_LIMITED
+API 限流
+检查频率受限，请稍后
+缓存/等待
+NO_STABLE_RELEASE
+没有稳定 Release
+当前没有可用的稳定更新
+正常结果
+18.1 提示文本原则
+先说明发生了什么，再说明数据是否安全，最后给出下一步。
+不向普通用户显示完整命令行或 Python traceback；详情放日志和诊断。
+不使用“下载完成”描述仅完成 Git checkout 的状态。
+可恢复错误显示“重试”；完整性错误显示“查看详情/重新下载”，不默认重试覆盖。
+19. 日志与诊断
+19.1 结构化字段
+字段
+示例/说明
+timestamp
+ISO 8601，含时区
+level
+DEBUG/INFO/WARN/ERROR
+event
+git.fetch.start / sparse.verify.failed / book.ready
+task_id / book_id
+可为空，但任务事件必须有
+stage
+fetch/checkout/merge/verify/persist
+repository_commit
+短 SHA 用于显示，完整 SHA 进结构字段
+duration_ms / bytes / attempt
+性能和重试
+error_code
+稳定错误码
+safe_context
+路径应相对化；URL 和凭据脱敏
+19.2 Git 命令日志
+记录命令名、经过脱敏和规范化的参数、cwd 标识、退出码、耗时及 stderr 摘要。不得记录 token、Authorization header、credential helper 输出或包含秘密的 URL query。原始 stderr 进入受限诊断时也必须再次脱敏。
+19.3 诊断包
+应用/Git/操作系统版本。
+工作区 origin、HEAD、branch、Git status 的安全摘要。
+状态 Schema 版本与任务摘要，不默认包含完整书名列表。
+最近错误附近的日志片段。
+磁盘空间、路径长度、锁信息。
+明确排除 PDF 内容、认证凭据和用户无关文件。
+20. 接口、命令和伪代码规范
+20.1 建议 Protocol
+class RepositoryClient(Protocol):    def discover_remote_head(self) -> RemoteHead: ...    def ensure_workspace(self, remote: RemoteHead) -> WorkspaceIdentity: ...    def fetch_commit(self, commit: str, cancel: CancelToken) -> None: ...    def build_tree_snapshot(self, commit: str) -> CatalogTree: ...class ExactMaterializer(Protocol):    def materialize(        self,        commit: str,        files: Sequence[SourceFileRef],        cancel: CancelToken,        progress: ProgressSink,    ) -> MaterializedSet: ...class UpdateService(Protocol):    def check_catalog_update(self, local_commit: str) -> UpdateSummary: ...    def check_software_release(self, current_version: str) -> ReleaseNotice | None: ...
+20.2 下载事务伪代码
+def execute_download(plan: DownloadPlan) -> TaskResult:    assert plan.repository_url == OFFICIAL_REPOSITORY    validate_plan_against_catalog(plan)    reserve_output_paths(plan)    ensure_space(plan.space_budget)    repository.fetch_commit(plan.commit)    materialized = exact_materializer.materialize(        commit=plan.commit,        files=plan.selected_files,        cancel=cancel_token,        progress=progress_sink,    )    verify_materialized_set(materialized, plan.selected_files)    for book in plan.books:        candidate = build_candidate_in_staging(book, materialized)        verification = verifier.verify(candidate)        published = publisher.atomic_publish(candidate, book.output_path)        state_store.commit_book_ready(book, verification, published)    state_store.commit_task_completed(plan.task_id)
+20.3 Git 子进程要求
+subprocess 参数数组；shell=False。
+显式 cwd、环境白名单、stdin bytes/text、stdout/stderr 管道消费。
+所有 Git 调用设置可取消 token 和超时策略。
+使用 -- 分隔 revisions 与 pathspec（适用命令）；对 stdin pattern 不依赖 shell quoting。
+命令完成后同时检查退出码和业务后置条件。
+21. 测试与验收标准
+21.1 P0 功能验收
+编号
+场景
+通过标准
+GT-001
+首次初始化
+只连接官方仓库；partial clone 成功；不检出全部 PDF
+GT-002
+选择一本普通 PDF
+工作区/暂存只出现该 Book 的精确源文件，不出现同目录其他教材
+GT-003
+选择一本三分卷 PDF
+只获取 .1/.2/.3；顺序正确；合并和 SHA256 通过
+GT-004
+中途网络中断
+UI 不冻结；有限重试；旧成品不受影响
+GT-005
+下载时取消
+到安全点 cancelled；可恢复材料和状态一致
+GT-006
+上游删除末卷
+不合并；旧成品保留；Group stale
+GT-007
+实际 sparse 集合多出文件
+任务 fail-closed，不复制到 staging
+GT-008
+状态原子写失败
+不得标 ready/completed；旧 state 仍可读
+GT-009
+目录 API truncated
+完成子树补读或保留旧缓存；不得显示不完整目录为成功
+GT-010
+软件有新稳定 Release
+非阻塞提示，忽略/稍后有效；不自动安装
+21.2 跨平台路径用例
+中文、空格、括号、#、!、[ ]、?、* 字符（后四类需 pattern 转义）。
+Windows 大小写不敏感冲突、保留名、长路径和尾随点/空格。
+Ubuntu 大小写敏感路径和不同 Unicode normalization 表现。
+拒绝含 CR/LF 或 NUL 的 Git path。
+21.3 性能目标
+指标
+目标
+有缓存启动到可浏览
+普通设备 ≤ 2 秒（不含首次安装）
+目录搜索响应
+典型目录 < 200 ms
+UI 进度刷新
+不超过 10 Hz，无明显冻结
+目录 API 未变化
+ETag 304 或轻量 HEAD 检查
+首次 clone
+不预取全部 PDF blob；实际传输明显小于完整仓库 clone
+状态保存
+常规状态 < 250 ms；失败可检测并恢复
+21.4 故障注入
+在 fetch、checkout、复制、merge、verify、replace、state write 各点注入异常。
+模拟 Git 子进程卡死、输出管道阻塞、index.lock 遗留。
+模拟 API 404、403 rate limit、429、500、超大响应、truncated tree 和 malformed JSON。
+模拟断电后的临时文件、已 replace 未保存状态、已验证未 clean 等边界。
+附录 A. Git 命令基线
+目的
+命令基线
+备注
+版本
+git --version
+解析，不依赖本地化文案其他部分
+远端 HEAD
+git ls-remote --symref <url> HEAD
+默认分支发现
+克隆
+git clone --filter=blob:none --no-checkout --single-branch --branch <b> <url> <workspace>
+不使用 shallow
+仓库验证
+git -C <w> rev-parse --is-inside-work-tree
+必须 true
+origin
+git -C <w> remote get-url origin
+规范化后必须官方 URL
+fetch
+git -C <w> fetch --prune --no-tags origin +refs/heads/<b>:refs/remotes/origin/<b>
+显式 refspec
+解析 commit
+git -C <w> rev-parse refs/remotes/origin/<b>
+冻结 SHA
+本地树
+git -C <w> ls-tree -r -z <commit>
+NUL 分隔
+设置规则
+git -C <w> sparse-checkout set --no-cone --no-sparse-index --stdin
+受控例外
+规则验证
+git -C <w> sparse-checkout check-rules --no-cone -z
+输入输出 NUL 分隔路径
+检出
+git -C <w> checkout --detach <commit>
+工作区只读
+状态
+git -C <w> status --porcelain=v2 -z
+必须无用户修改
+实现注意：Git sparse-checkout 命令在官方文档中仍标为 experimental，non-cone 进一步标为 deprecated。因此命令基线必须有版本矩阵测试，不能仅以最低版本测试一次。
+附录 B. 稀疏规则示例
+B.1 普通文件
+Git path:小学/数学/一年级/人教版数学一年级上册.pdf规则（概念表示）：/小学/数学/一年级/人教版数学一年级上册.pdf
+B.2 特殊字符转义
+Git path:初中/物理/八年级/[实验]力与运动!.pdf.1根锚定 exact pattern 必须转义 pattern 元字符：/初中/物理/八年级/\[实验\]力与运动\!.pdf.1
+转义函数必须由测试向量验证，不应由 UI 或调用方手工处理。由于 Git non-cone 使用 gitignore-style patterns，开发人员必须以实际 Git check-rules 结果作为最终判据。
+B.3 集合后置条件
+expected = sorted(plan.selected_files.paths)matched  = sorted(git_sparse_check_rules(expected))actual   = sorted(scan_tracked_pdf_sources(workspace))assert matched == expectedassert actual == expected
+附录 C. 参考资料
+[1] Git - git-clone Documentation — partial clone、--filter=blob:none、--no-checkout、--sparse 等行为。
+[2] Git - git-sparse-checkout Documentation — sparse-checkout set/check-rules、cone/non-cone、experimental 与 non-cone deprecated 说明。
+[3] Git - partial-clone Documentation — 缺失对象、promisor remote 与 demand fetch 设计。
+[4] GitHub REST API - Git Trees — tree path、blob SHA、size、recursive 与 truncated 限制。
+[5] GitHub REST API - Compare two commits — 文件 added/removed/modified/renamed 及大型比较限制。
+[6] GitHub REST API - Releases — 最新稳定 Release 定义与公开资源访问。
+[7] GitHub REST API - API Versions — X-GitHub-Api-Version 和支持窗口。
+[8] GitHub REST API - Rate limits — rate limit 状态、分类和重试信息。
+参考资料的在线行为可能随 Git/GitHub 版本变化。实现应以 CI 中固定版本矩阵和契约测试结果为准，并在升级依赖前更新本文档。

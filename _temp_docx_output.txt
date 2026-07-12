@@ -1,0 +1,736 @@
+ChinaTextbook v1.1 数据模型与状态文件设计（2.3）
+第二批交付 - 开发评审版
+2026-07-12
+目录
+编号
+章节
+1
+目的与范围
+2
+核心设计决策
+3
+领域关系总览
+4
+建模与序列化约定
+5
+标识符和值对象
+6
+Catalog 领域模型
+7
+Selection 领域模型
+8
+DownloadPlan 与任务模型
+9
+GroupRecord 与验证证据
+10
+更新、失败与诊断模型
+11
+持久化边界
+12
+AppState 顶层结构
+13
+JSON Schema
+14
+状态文件读写协议
+15
+catalog_cache.json 协议
+16
+v1.0 → v1.1 迁移
+17
+崩溃恢复与启动校正
+18
+派生状态
+19
+安全与隐私要求
+20
+性能与容量
+21
+测试要求
+22
+交付文件说明
+23
+架构评审清单
+附录 A
+规范枚举
+附录 B
+推荐错误码
+附录 C
+v1.0 到 v1.1 字段映射摘要
+版本： 1.1状态： 开发评审版日期： 2026-07-12范围： 第二批交付：2.3 完整版
+文档控制
+项目
+内容
+文档用途
+冻结 v1.1 的领域实体、值对象、标识符、持久化边界、状态文件格式、校验规则和 v1.0 → v1.1 迁移策略。
+主要读者
+技术负责人、Python/Textual 开发人员、测试人员、数据迁移与代码评审人员。
+前置文档
+2.1《系统总体架构设计》、2.2《模块设计说明》及第一批 PRD/UI 文档。
+后续文档
+2.4 状态机、2.5 Git/下载/更新流程、测试与发布规范。
+规范级别
+“必须/不得”为强制要求；示例 JSON 是规范性示例，JSON Schema 是机器校验基线。
+1. 目的与范围
+本文件把 2.2 中的模块边界落实为稳定的数据契约。它回答以下问题：一本教材在系统中如何表示；普通 .pdf 与 .pdf.1/.pdf.2... 如何聚合；选择状态如何从逻辑书目展开为精确 Git 路径；后台任务、进度、错误和验证证据如何表示；哪些数据应持久化；china_textbook_state.json 如何原子写入、校验和迁移。
+本文件覆盖：
+领域实体：Book、SourceFile、CategoryNode、CatalogIndex、DownloadPlan、TaskRecord、GroupRecord、VerificationRecord。
+值对象和稳定标识符：BookId、TaskId、GitPath、SHA256、CommitId、RFC 3339 时间。
+选择、检出、任务、更新、偏好和失败记录。
+china_textbook_state.json 与 catalog_cache.json。
+JSON Schema、示例 JSON、迁移规则、恢复策略和数据不变量。
+本文件不定义 Textual Widget 的展示字段；ViewModel 由领域实体派生，不是持久化格式。本文件也不替代 2.4 的完整生命周期状态机，但会冻结状态枚举和允许持久化的状态值。
+2. 核心设计决策
+Book 是一本教材，不是一个磁盘 PDF 文件。 普通 .pdf 是一个 SourceFile；.pdf.1/.pdf.2... 是同一 Book 的多个 SourceFile。
+逻辑路径是 Book 与 Group 的长期身份基础。 分卷数量变化不会改变 BookId；书名路径变化会被视为新 Book。
+选择状态分两层。 selected_books 保存用户意图；selected_files 保存根据当前目录索引展开后的精确 Git 路径。
+选择指纹只基于 selected_files。 分类目录、UI 顺序、Book 标题和本地路径不得参与指纹。
+groups 是跨选择的验证缓存。 v1.0 中可信的 size、sha256、parts 和时间记录必须迁移保留。
+旧目录级选择不自动猜测为书目。 v1.0 的 selected_paths 在升级后作废，并设置 requires_reselection=true。
+JSON Schema 与业务不变量双重校验。 Schema 检查形状和基本约束，领域校验检查跨字段关系。
+状态写入必须原子化。 任何写入失败都不得破坏最后一个有效状态文件。
+持久化记录不保存秘密。 Token、Authorization、代理密码和未脱敏 URL 不得进入状态、缓存或日志。
+时间必须带时区。 v1.1 新写入时间统一使用 RFC 3339，如 2026-07-12T13:30:00+08:00。
+3. 领域关系总览
+领域数据关系
+CatalogIndex 由 Git Tree 构建，包含 CategoryNode 与 Book。
+Book 由一个或多个 SourceFile 组成。
+SelectionState 只引用 BookId，并展开得到精确 SourceFile GitPath。
+DownloadPlan 是选择快照、仓库 commit 和执行选项的不可变冻结版本。
+TaskRecord 描述后台执行生命周期；任务完成后更新 GroupRecord。
+GroupRecord 保存成品 PDF 与来源集合的验证证据。
+4. 建模与序列化约定
+4.1 命名
+Python：类名 PascalCase，字段 snake_case，枚举值使用小写蛇形字符串。
+JSON：全部使用 snake_case，不得混用 camelCase。
+文件路径：Git 路径使用 /；不得使用平台相关反斜杠。
+ID：带类型前缀，例如 bk_、tsk_、cat_。
+4.2 可变性
+Book、SourceFile、CategoryNode、DownloadPlan、VerificationRecord 必须是不可变对象，建议 @dataclass(frozen=True, slots=True)。
+TaskRecord 是受 TaskRegistry 管理的可变聚合；外部只能得到不可变 TaskSnapshot。
+AppState 的修改必须通过 StateRepository 的事务式更新入口，禁止任意模块直接改嵌套字典。
+4.3 空值
+缺少信息使用 JSON null，不得用空字符串冒充未知值。
+空集合使用 [] 或 {}，不得使用 null。
+不可靠的出版社、ISBN、发布日期不得猜测填充。
+4.4 数值
+文件大小统一使用整数 bytes，字段后缀 _bytes。
+百分比范围为 0–100；未知时为 null。
+分卷号为从 1 开始的正整数。
+4.5 时间
+所有新时间必须包含时区。
+时间字段以 _at 结尾。
+v1.0 无时区时间在迁移时按运行机器本地时区解释，并在迁移 notes 中记录。
+5. 标识符和值对象
+5.1 GitPath
+GitPath 是仓库根目录相对路径，必须满足：
+不以 / 开头；
+使用 / 分隔；
+不包含 .. 路径段、NUL、反斜杠；
+应执行 Unicode NFC 规范化；
+不得对大小写做跨平台折叠，Git 路径按字节和 Unicode 规范化后的值识别。
+5.2 logical_path
+logical_path 是一本教材的规范 PDF 路径，必须以 .pdf 结尾：
+普通文件：小学/数学/一年级/教材.pdf；
+分卷文件 .pdf.1、.pdf.2 的 logical_path 均为去掉数字后缀的 .../教材.pdf。
+该值同时作为 groups 对象的 key，保持与 v1.0 PDF 组 key 的概念兼容。
+5.3 BookId
+规范算法：
+canonical = "v1|" + NFC(logical_path)book_id = "bk_" + SHA256(UTF-8(canonical)) 前 24 个十六进制字符
+24 个十六进制字符提供 96 bit 标识空间。Catalog 构建时必须检测碰撞；若两个不同 logical_path 得到同一 BookId，目录构建应失败而不是覆盖。
+5.4 TaskId 与 CategoryId
+task_id = "tsk_" + 24 hex，使用安全随机值或 UUID 的哈希形式。
+category_id = "cat_" + SHA256("v1|kind|parent|label")[:24]。
+ID 不包含用户可读业务含义，显示名称由独立字段提供。
+5.5 SHA256 与 CommitId
+SHA256 必须是 64 位小写十六进制。
+Git Commit/OID 支持 40–64 位小写十六进制，以兼容 SHA-1 与 SHA-256 仓库格式。
+只有完整读取文件后计算的哈希才能作为完成证据。
+6. Catalog 领域模型
+6.1 SourceFile
+字段
+类型
+必填
+说明
+git_path
+GitPath
+是
+精确 Git 源文件路径。
+kind
+SourceKind
+是
+complete_pdf 或 split_part。
+part_number
+int/null
+是
+普通 PDF 为 null；分卷为正整数。
+size_bytes
+int/null
+否
+Git Tree/平台能可靠提供时填写。
+git_oid
+str/null
+否
+Blob OID，用于更新差异与缓存。
+不变量：
+complete_pdf 的 part_number 必须为 null。
+split_part 的 part_number 必须 >= 1。
+同一 Book 的 git_path 不得重复。
+6.2 Book
+字段
+类型
+说明
+book_id
+BookId
+稳定逻辑标识。
+logical_path
+GitPath
+规范输出 PDF 路径。
+title
+str
+从文件名安全解析的显示标题。
+stage
+str
+学段，如小学、初中、高中。
+subject
+str
+科目。
+category_label
+str
+年级、册次或仓库实际分类。
+publisher
+str/null
+仅在路径或可信元数据可确定时填写。
+source_files
+tuple[SourceFile]
+一个普通文件或多个分卷。
+expected_size_bytes
+int/null
+所有已知源文件大小之和。
+search_text
+str
+规范化搜索文本。
+catalog_issues
+tuple[str]
+不阻断展示的目录警告；阻断问题不得生成可下载 Book。
+Book 的 source_files 必须按以下顺序冻结：普通 PDF 只有一项；分卷按 part_number 升序。
+6.3 CategoryNode
+CategoryNode 只描述 UI 导航分类，不拥有选择状态。
+字段
+类型
+说明
+node_id
+CategoryId
+稳定节点 ID。
+parent_id
+CategoryId/null
+根节点为 null。
+kind
+root/stage/subject/category
+导航层级。
+label
+str
+显示文本。
+sort_key
+str
+稳定排序键。
+导航顺序必须为：root → stage → subject → category → Book 列表。科目必须位于年级/册次之前。
+6.4 CatalogIndex
+CatalogIndex 是某一仓库 commit 的完整只读快照，包含：
+repository_commit；
+generated_at；
+fingerprint；
+categories；
+books；
+内存中的 book_by_id、books_by_category、book_by_logical_path 派生索引。
+派生索引不写入 JSON，加载缓存后重建。
+6.5 书目聚合规则
+书目聚合规则
+遍历 Git Tree 中的文件路径。
+匹配普通 .pdf 或分卷 .pdf.<正整数>。
+生成 logical_path。
+按 logical_path 分组。
+对每组执行严格校验。
+通过后生成一个 Book。
+必须拒绝或隔离的目录问题：
+同一 logical_path 同时存在普通 .pdf 和 .pdf.N；
+重复卷号，例如 .1 与 .01；
+分卷不是从 1 开始或中间断号；
+logical_path 不安全；
+一个组只包含 .pdf.1 且无上游基准可证明完整性；该组可在目录中标记问题，但不得进入自动合并流程。
+6.6 Catalog fingerprint
+Catalog fingerprint 建议基于以下规范行排序后计算 SHA256：
+book_id<TAB>logical_path<TAB>git_path<TAB>git_oid-or-empty<TAB>size-or-empty
+该指纹只用于缓存一致性和变更检测，不作为输出 PDF 的验证证据。
+7. Selection 领域模型
+7.1 SelectionState
+字段
+类型
+说明
+requires_reselection
+bool
+升级或目录不兼容时要求用户重新选择。
+selected_books
+list[BookId]
+用户逻辑选择，去重。
+selected_files
+list[GitPath]
+根据当前 Catalog 展开的精确源文件路径。
+fingerprint
+SHA256/null
+selected_files 的规范指纹。
+updated_at
+datetime/null
+最近变更时间。
+7.2 展开规则
+selected_files 由 selected_books 与当前 CatalogIndex 重新计算：
+验证每个 BookId 存在。
+合并每本 Book 的 source_files.git_path。
+Unicode NFC 规范化。
+去重并按 GitPath 字典序排序。
+计算 fingerprint。
+不得使用旧的 selected_files 反推出 selected_books，因为路径可能已移动或目录索引已更新。
+7.3 选择指纹
+fingerprint = SHA256(UTF-8("\n".join(sorted(unique(selected_files)))))
+无选择时 fingerprint 为 null，而不是空集合的 SHA256。
+指纹必须基于精确文件路径，不得基于目录路径。
+checkout.selection_fingerprint 必须与当前 selection.fingerprint 一致，checkout 才可视为当前有效。
+7.4 分类全选
+分类全选只是 UI/Application 层批量生成 BookId 的操作。持久化结果仍然是 selected_books，不保存“选中了某个分类”的隐式规则，避免仓库新增教材后自动改变用户选择。
+8. DownloadPlan 与任务模型
+8.1 DownloadPlan
+DownloadPlan 在用户确认下载时创建，是不可变执行快照，至少包含：
+plan_id；
+repository_commit；
+catalog_fingerprint；
+selection_fingerprint；
+book_plans；
+output_dir；
+verify_hashes=true；
+clean_parts_after_verify；
+created_at。
+计划创建后，即使 UI 继续修改选择，也不得影响已运行任务。用户需要重新开始新任务才能使用新选择。
+8.2 BookDownloadPlan
+每本书计划包含：BookId、logical_path、source_files、目标输出路径、是否需要合并、预估字节数、已有 GroupRecord 快照和安全策略。
+8.3 TaskRecord
+字段
+说明
+task_id
+任务标识。
+kind
+catalog_refresh、download、verify、update_check、repository_update、diagnostic。
+state
+pending、running、cancelling、completed、failed、cancelled、interrupted。
+stage
+queued、preflight、fetch、checkout、merge、verify、cleanup、persist、done。
+book_ids
+涉及教材。
+created_at/started_at/completed_at
+带时区时间。
+cancel_requested
+用户是否请求取消。
+progress
+标准化进度快照。
+error
+结构化 TaskError 或 null。
+活动任务可持久化以支持崩溃恢复。应用启动时，磁盘中 pending/running/cancelling 的旧任务必须转换为 interrupted，不得假装仍在运行。
+8.4 TaskProgress
+进度同时支持单位和字节：
+completed_units / total_units；
+bytes_done / bytes_total；
+percent；
+estimated；
+message。
+当 Git 只能提供估算值时，estimated=true。不得将估算进度作为数据完成证据。
+8.5 TaskError
+TaskError 只保存用户可理解、可持久化的摘要：
+code：稳定错误码；
+summary：最多 500 字符，已脱敏；
+retryable；
+book_id / logical_path。
+完整堆栈进入日志文件，不进入 state.json。
+9. GroupRecord 与验证证据
+9.1 GroupRecord 的角色
+GroupRecord 是某个 logical PDF 成品的跨选择持久缓存和安全证据。它不等同于 Book：Book 描述上游目录，GroupRecord 描述本地已生成并验证的输出。
+字段
+说明
+logical_path
+与 groups key 相同。
+book_id
+当前目录能关联时填写；旧迁移记录可为 null。
+status
+ready、stale、failed。
+output_path
+本地输出文件。
+size_bytes
+成品大小，必须 > 0。
+sha256
+成品哈希；ready 必须有。
+source_parts
+历史分卷号集合，用于删卷检测。
+source_files
+创建成品时的精确源路径；旧记录可为空。
+source_fingerprint
+source_files 指纹；旧记录可为空。
+repository_commit
+创建/验证时仓库 commit；旧记录可为空。
+created_at / verified_at
+时间。
+stale
+是否陈旧、原因和发现时间。
+legacy_imported
+是否从 v1.0 不完整模型迁入。
+9.2 ready 的完成条件
+GroupRecord 只有满足以下条件才能写为 ready：
+输出文件存在且非空；
+完整计算输出 SHA256；
+临时输出的流式哈希与落盘后重新读取哈希一致；
+source_files 与 Catalog/Manifest 安全规则一致；
+状态原子保存成功。
+9.3 stale
+以下变化应标记 stale，而不是删除历史证据：
+上游相关文件 OID 或 commit 变化；
+source_files 集合变化；
+diff 无法可靠完成；
+用户切换到不一致的工作区；
+输出文件大小或哈希与记录不一致。
+上游分卷减少时必须 fail-closed：若本地完整输出仍存在，保留该文件并拒绝自动用变短的分卷集合覆盖。
+9.4 普通 PDF
+普通 .pdf 也对应一个 Book 和一个 GroupRecord。Downloader 检出后仍应计算 SHA256 并写入 GroupRecord；source_parts=[]，source_files 包含该普通 PDF 路径。
+10. 更新、失败与诊断模型
+10.1 UpdateState
+持久化内容仅包括：忽略的软件版本、最近软件检查时间、最近目录检查时间。远端更新详情可在内存中保留并在需要时重新检查，避免状态文件长期保存陈旧的网络响应。
+10.2 FailureStore
+failures.recent 保存最近最多 100 条 TaskError。按 book、task、error code 的聚合统计属于 ViewModel/报告派生数据，不重复持久化。
+10.3 DiagnosticSnapshot
+诊断快照默认不持久化，只在用户导出时生成。必须包含版本、Git 版本、平台、目录状态、最近错误码和脱敏日志片段；不得包含 Token、Authorization 或未经脱敏的代理配置。
+11. 持久化边界
+持久化边界
+11.1 china_textbook_state.json
+保存：
+仓库和本地工作区元数据；
+Catalog 缓存引用；
+逻辑选择和精确文件选择；
+checkout 适用性；
+groups 验证证据；
+活动任务恢复信息和有限历史；
+最近结构化失败；
+用户偏好；
+更新检查时间；
+迁移记录。
+11.2 catalog_cache.json
+保存某个 commit 的 CategoryNode 和 Book 快照。它是可再生缓存：损坏时可删除并从 Git Tree 重建，不得影响可信 groups 记录。
+11.3 不持久化
+ViewModel、Widget 状态、焦点位置；
+实时 WorkerMessage；
+Git 进程对象、文件句柄、锁对象；
+未脱敏异常堆栈；
+Token、密码、Authorization；
+可以从已有字段无歧义派生的索引字典。
+12. AppState 顶层结构
+{  "schema_version": "1.1.0",  "app_version": "1.1.0",  "created_at": "...",  "updated_at": "...",  "repository": {},  "catalog": {},  "selection": {},  "checkout": {},  "groups": {},  "tasks": {},  "failures": {},  "preferences": {},  "updates": {},  "migration": {}}
+12.1 schema_version 与 app_version
+schema_version 表示状态格式，独立于软件补丁版本。
+app_version 表示最后写入状态的应用版本。
+只有 schema_version 变化才必须执行状态迁移。
+12.2 repository
+固定 URL 必须为官方仓库。local_head 和 remote_head 为 null 表示尚未探测，不表示空仓库。工作区真实性仍应通过 .git、origin 和 HEAD 运行时检查，不能只相信 JSON。
+12.3 catalog
+valid=true 仅表示缓存文件通过 Schema、fingerprint 和 commit 关联校验。缓存文件不存在或失效时，应用重建目录，不清除 groups。
+12.4 checkout
+complete=true 必须同时满足：
+repository_commit 等于当前 local_head；
+selection_fingerprint 等于当前 selection.fingerprint；
+sparse-checkout 配置与 selected_files 完全匹配；
+工作区没有缺失的所选文件。
+JSON 记录只是快速入口；启动后仍需轻量验证。
+12.5 preferences
+v1.1 的 verify_hashes 固定为 true。若保留开发调试开关，应只存在命令行运行期，不写入正式用户状态。clean_parts_after_verify 仅在哈希验证成功后生效。
+13. JSON Schema
+交付包包含：
+schemas/app-state.schema.json；
+schemas/catalog-cache.schema.json。
+Schema 使用 JSON Schema Draft 2020-12，并设置 additionalProperties=false。未知字段不应悄悄忽略：升级时必须由迁移器显式处理，降级打开新格式时应备份并拒绝破坏性写回。
+Schema 校验通过仍不代表业务状态有效。以下跨字段不变量必须由领域校验实现：
+groups key 等于 record.logical_path；
+selected_files 精确等于 selected_books 在当前 Catalog 的展开结果；
+selection.fingerprint 与 selected_files 一致；
+checkout.complete 时两个 fingerprint 和 commit 均匹配；
+GroupRecord ready 时输出文件哈希与记录一致；
+Book source_files 分卷连续且无重复；
+活动任务 task_id 唯一；
+history 不包含 pending/running/cancelling；
+时间顺序满足 created_at ≤ started_at ≤ completed_at；
+legacy_imported=false 的 GroupRecord 必须有 source_files、source_fingerprint 和 repository_commit。
+14. 状态文件读写协议
+状态原子写入
+14.1 读取
+获取共享/进程级访问控制。
+读取完整文件，限制最大合理大小，例如 20 MB。
+UTF-8 解码并解析 JSON。
+根据 schema_version 选择 Schema/迁移器。
+执行 Schema 校验。
+执行业务不变量校验。
+构建类型化 AppState。
+14.2 写入
+在内存中创建新的完整 AppState；不得原地部分写字典。
+更新时间并校验。
+获取独占进程锁。
+写入同目录临时文件，如 china_textbook_state.json.tmp.<pid>。
+flush + fsync 临时文件。
+使用 os.replace 原子替换。
+支持的平台上 fsync 目录。
+释放锁并发布 StateSaved。
+14.3 备份
+Schema 迁移前必须创建带版本和时间戳的备份。
+普通每次保存不需要复制完整备份；可保留一个 .last-good.bak 作为额外恢复措施。
+备份创建失败时不得执行迁移写回。
+14.4 并发
+一个工作区只允许一个可写应用实例。--status 等只读模式可在明确不会与原子替换冲突的情况下读取快照。锁文件回收必须验证 PID/启动标识，避免误删活跃锁。
+15. catalog_cache.json 协议
+缓存文件绑定 repository_commit。加载时依次检查：
+Schema；
+repository_commit 等于期望 commit；
+fingerprint 重算一致；
+BookId 和 logical_path 唯一；
+分类父节点存在且无循环；
+Book 的分类值可映射到导航节点。
+任何失败都只使缓存失效并重建，不得删除 state.json 中的 groups。
+16. v1.0 → v1.1 迁移
+状态迁移
+16.1 必须保留
+groups 中 status=ok 且有可信 size/sha256 的记录；
+parts 历史集合；
+记录时间 at；
+最近失败的用户可理解摘要（能安全转换时）；
+用户可确认的输出偏好。
+16.2 必须作废
+selected_paths：它是目录级选择，不能可靠映射到具体书目；
+selection_fingerprint：旧指纹基于目录路径；
+checkout_done；
+target_dirs；
+size_cache；
+clone_done/selection_done 等可从真实环境派生的布尔缓存。
+16.3 groups 映射
+v1.0：
+"路径/教材.pdf": {  "status": "ok",  "size": 123,  "sha256": "...",  "parts": [1, 2],  "at": "..."}
+v1.1 迁移后：
+status → ready；
+size → size_bytes；
+at → created_at/verified_at；
+source_parts 保留；
+book_id、source_files、source_fingerprint、repository_commit 暂为 null/空；
+legacy_imported=true。
+目录重建后可以按 logical_path 关联 BookId，但不得凭空补写 source_fingerprint 或 repository_commit。只有重新验证/重建后，才将记录升级为完整 v1.1 证据。
+16.4 时间迁移
+v1.0 的 naive ISO 时间按迁移机器本地时区解释，转换为带 offset 的 RFC 3339。迁移 notes 必须记录该假设。
+16.5 迁移幂等性
+每个迁移函数输入旧 schema，输出新 AppState，不直接写文件。
+registry 按版本链顺序执行。
+已为 1.1.0 的状态不得再次执行 v1.0 迁移。
+迁移失败时保留原文件和备份，并以空的新状态安全启动；不得修改旧文件。
+17. 崩溃恢复与启动校正
+启动时执行以下校正：
+tasks.active 中旧的 pending/running/cancelling → interrupted，并移入 history。
+检查临时状态文件；只有在主文件损坏且临时文件完整通过校验时，才允许人工确认恢复。
+验证工作区 origin 指向官方仓库。
+验证 catalog 缓存与 local_head。
+重新计算 Selection 展开与 fingerprint；不一致时设置 requires_reselection 或刷新 selected_files。
+轻量检查 checkout 适用性。
+对当前选择相关的 ready groups 检查文件存在和大小；完整哈希可在用户操作或后台验证任务中执行。
+恢复过程不得自动删除 PDF、分卷或旧状态备份。
+18. 派生状态
+以下 UI 状态不直接持久化，应根据 Catalog、Selection、Checkout、GroupRecord 和 TaskRecord 计算：
+BookStatus
+判定摘要
+available
+在 Catalog 中，可选择，尚无本地成品。
+selected
+位于 selected_books，尚未运行。
+queued/running
+有对应活动下载任务。
+ready
+存在非 stale 的 ready GroupRecord，文件通过验证。
+stale
+GroupRecord stale 或仓库来源已变化。
+failed
+最近任务对该 Book 失败。
+unavailable
+书目存在阻断性 CatalogIssue 或源文件不完整。
+同一时间若多个条件成立，显示优先级建议为：running > failed > stale > ready > selected > available。
+19. 安全与隐私要求
+状态和缓存不得保存 Token、Authorization、Cookie、代理密码。
+仓库 URL 固定为官方 URL，不接受状态文件覆盖为任意源。
+本地路径可保存在用户本机状态，但导出诊断时应缩短为目录名或脱敏 home 前缀。
+TaskError.summary 必须通过 URL/凭据脱敏器。
+JSON 解析必须限制文件大小和嵌套深度，避免异常文件造成资源消耗。
+所有路径在使用前重新验证并约束在预期 workspace/output 根目录内，防止路径穿越。
+绝不依据 state.json 中的布尔值直接执行删除；删除前必须以真实文件、哈希和 Manifest 重新证明安全。
+20. 性能与容量
+建议目标：
+10,000 本 Book 的 Catalog 缓存加载在普通电脑上小于 2 秒。
+搜索索引留在内存，输入响应目标小于 200 ms。
+state.json 建议保持小于 5 MB，硬限制 20 MB。
+task history 与 recent failures 各保留最多 100 条。
+groups 不设很小的固定上限，因为它承担跨选择缓存；可提供人工清理陈旧记录功能，但不得自动清除可信哈希证据。
+Catalog 缓存与状态分文件，避免每次选择变化重写大型 Book 列表。
+21. 测试要求
+21.1 模型单元测试
+BookId/CategoryId 生成稳定性和碰撞检测。
+GitPath 安全校验、Unicode NFC 和 POSIX 化。
+普通 PDF 与分卷聚合。
+混合普通/分卷、重复卷号、断卷和单卷异常。
+selection 展开、去重、排序和 fingerprint。
+GroupRecord ready/stale/legacy 约束。
+Task 时间和状态字段不变量。
+21.2 Schema 合约测试
+所有 example JSON 必须通过对应 Schema。
+缺少必填字段、未知字段、错误 hash、危险路径必须失败。
+ready group 无 sha256 必须失败。
+legacy_imported=false 但缺少 source_files 必须失败。
+21.3 状态存储测试
+模拟写入中断，旧主文件保持可读。
+os.replace 前后断电点故障注入。
+锁竞争和陈旧锁回收。
+损坏 JSON、超大文件、错误编码。
+Schema 迁移备份失败时不得写回。
+21.4 迁移测试
+使用真实 v1.0 状态 fixture。
+目录级选择必须清空并要求重选。
+groups 哈希和 parts 不丢失。
+naive 时间转换可预测。
+迁移重复运行不产生二次变化。
+旧 groups 重新验证后能升级为完整 v1.1 记录。
+22. 交付文件说明
+文件
+用途
+schemas/app-state.schema.json
+v1.1 状态文件机器校验。
+schemas/catalog-cache.schema.json
+Catalog 缓存机器校验。
+examples/app-state.example.json
+完整状态示例。
+examples/catalog-cache.example.json
+一本分卷教材的目录示例。
+examples/migration-v1.0-input.example.json
+v1.0 迁移输入 fixture。
+examples/migration-v1.1-output.example.json
+迁移后的预期输出 fixture。
+reference/reference_models.py
+Python dataclass/enum 参考骨架。
+diagrams/*.png
+领域关系、持久化、写入和迁移图。
+23. 架构评审清单
+☐ Book 是否始终代表一本教材，而不是单个分卷？
+☐ ordinary .pdf 与 .pdf.N 是否都被建模为 SourceFile？
+☐ selected_books 与 selected_files 是否分离？
+☐ fingerprint 是否只基于规范化精确 Git 路径？
+☐ v1.0 目录级选择是否明确失效？
+☐ groups 的可信 size/sha256/parts 是否完整保留？
+☐ GroupRecord ready 是否必有 SHA256？
+☐ legacy 记录是否不会被误当作完整来源证据？
+☐ state 写入是否经过校验、锁、临时文件和原子替换？
+☐ Catalog 缓存损坏是否只触发重建，不影响 groups？
+☐ 活动任务在崩溃重启后是否变为 interrupted？
+☐ 未知字段和未知 schema 是否 fail-closed？
+☐ 状态和诊断中是否完全排除凭据？
+☐ 所有删除操作是否重新验证真实文件和哈希，而非相信状态布尔值？
+附录 A：规范枚举
+枚举
+值
+SourceKind
+complete_pdf, split_part
+GroupStatus
+ready, stale, failed
+TaskKind
+catalog_refresh, download, verify, update_check, repository_update, diagnostic
+TaskState
+pending, running, cancelling, completed, failed, cancelled, interrupted
+TaskStage
+queued, preflight, fetch, checkout, merge, verify, cleanup, persist, done
+CategoryKind
+root, stage, subject, category
+Theme
+dark, light, system
+附录 B：推荐错误码
+错误码
+说明
+默认可重试
+CATALOG_PATH_INVALID
+不安全或无法规范化的 Git 路径
+否
+CATALOG_DUPLICATE_PART
+分卷号重复
+否
+CATALOG_PART_GAP
+分卷不连续
+否
+CATALOG_MIXED_SOURCE
+普通 PDF 与分卷并存
+否
+SELECTION_BOOK_MISSING
+已选 BookId 不在当前目录
+需刷新/重选
+CHECKOUT_MISMATCH
+sparse-checkout 与选择不一致
+是
+GIT_NETWORK_TRANSIENT
+临时网络错误
+是
+MANIFEST_UNAVAILABLE
+无法读取可信 Git 清单
+是
+UPSTREAM_PART_REMOVED
+上游删除历史分卷
+否，需人工确认
+OUTPUT_HASH_MISMATCH
+输出与可信哈希不一致
+是，重建
+STATE_SCHEMA_INVALID
+状态文件不符合 Schema
+否，需恢复/迁移
+STATE_WRITE_FAILED
+原子保存失败
+是
+TASK_INTERRUPTED
+上次运行被中断
+是
+附录 C：v1.0 到 v1.1 字段映射摘要
+v1.0
+v1.1
+处理
+version
+schema_version + app_version
+显式拆分。
+repo_source
+repository.url
+统一为官方 URL。
+default_branch
+repository.default_branch
+保留。
+clone_done
+无直接字段
+从工作区真实状态派生。
+selection_done
+selection.requires_reselection 等
+不直接迁移。
+selected_paths
+selection.selected_books/files
+清空，要求重选。
+selection_fingerprint
+selection.fingerprint
+清空，算法已变化。
+checkout_done
+checkout.complete
+设 false。
+target_dirs
+无
+丢弃，Catalog/Manifest 派生。
+groups
+groups
+保留可信哈希并扩展。
+last_failures
+failures.recent
+可安全转换时迁移。
+size_cache
+catalog_cache
+丢弃并重建。

@@ -1,34 +1,49 @@
-"""Book List Widget — center panel.
+"""Book List Widget -- center panel (ListView per design doc 2.2).
 
-Shows files in the currently highlighted directory.
-Split files (.pdf.1, .pdf.2...) are grouped as one logical book.
-Space/Enter toggles selection.
+Shows books in the highlighted directory. Split files grouped as one book.
+ListView natively supports Space/Enter selection.
 """
 
-from textual.widgets import DataTable
-from textual.binding import Binding
+from textual.widgets import ListView, ListItem, Static
+from textual.containers import Horizontal
 
-from chinatxtbook.ui.messages import BookFocused
 from chinatxtbook.utils.format import fmt_size
 
 
-class BookListWidget(DataTable):
-    """Center panel: files in selected directory."""
+class BookItem(ListItem):
+    """A single book row in the list."""
+
+    def __init__(self, book_key: str, name: str, parts: str, size: str,
+                 selected: bool = False, **kwargs):
+        super().__init__(**kwargs)
+        self.book_key = book_key
+        self._name = name
+        self._parts = parts
+        self._size = size
+        self._selected = selected
+
+    def compose(self):
+        check = "☑" if self._selected else "⬜"
+        yield Static(f"{check}  {self._name}  │  {self._parts}  │  {self._size}")
+
+
+class BookListWidget(ListView):
+    """Center panel: books in the selected directory (ListView per 2.2).
+
+    Space/Enter: toggle selection (native ListView behavior).
+    Arrow keys: move focus.
+    """
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._current_path: str = ""
-        self._all_groups: dict = {}
+        self._all_groups: dict = {}  # key -> book_data dict
 
     def on_mount(self) -> None:
-        self.cursor_type = "row"
-        self.zebra_stripes = True
-        self.add_columns("", "教材名称", "分卷", "大小")
-
-    # ── Data loading ─────────────────────────────────────────
+        self.border_title = "教材列表"
 
     def load_directory(self, git_client, dir_path: str, size_cache: dict = None):
-        """Load files in a directory, grouping split parts."""
+        """Load books in a directory, grouping split parts."""
         self.clear()
         self._all_groups.clear()
         self._current_path = dir_path
@@ -40,7 +55,6 @@ class BookListWidget(DataTable):
         from chinatxtbook.core.manifest import SPLIT_RE
 
         all_files = git_client.ls_tree(dir_path, recursive=True)
-
         groups: dict = {}
         singles: dict = {}
 
@@ -54,6 +68,9 @@ class BookListWidget(DataTable):
             elif name.lower().endswith(".pdf"):
                 singles[name] = f
 
+        app = self.app
+        selected_keys = getattr(app, 'selected_keys', set()) if app else set()
+
         # Add split groups
         for base_name, parts in sorted(groups.items()):
             key = f"{dir_path}/{base_name}"
@@ -63,7 +80,10 @@ class BookListWidget(DataTable):
                 "part_count": len(parts), "parts": parts,
                 "size": sz, "status": "not_downloaded",
             }
-            self.add_row("⬜", base_name, f"{len(parts)}卷", fmt_size(sz) if sz else "?")
+            sel = key in selected_keys
+            sz_str = fmt_size(sz) if sz else "?"
+            item = BookItem(key, base_name, f"{len(parts)}卷", sz_str, selected=sel)
+            self.append(item)
 
         # Add single PDFs
         for name, fpath in sorted(singles.items()):
@@ -74,91 +94,79 @@ class BookListWidget(DataTable):
                 "part_count": 1, "parts": {1: (name, fpath)},
                 "size": sz, "status": "not_downloaded",
             }
-            self.add_row("⬜", name, "1卷", fmt_size(sz) if sz else "?")
+            sel = key in selected_keys
+            sz_str = fmt_size(sz) if sz else "?"
+            item = BookItem(key, name, "1卷", sz_str, selected=sel)
+            self.append(item)
 
         if not groups and not singles:
-            self.add_row("", "展开到底层目录查看教材文件", "", "")
+            item = BookItem("", "展开到底层目录查看教材文件", "", "", selected=False)
+            self.append(item)
 
-    # ── Selection ────────────────────────────────────────────
-
-    def key_space(self) -> None:
-        """Space: toggle selection of current row."""
-        row_key = self.cursor_row
-        if row_key is None:
+    def on_list_view_selected(self, event: ListView.Selected) -> None:
+        """Space/Enter: toggle selection via native ListView event."""
+        if not event.item or not isinstance(event.item, BookItem):
             return
-        self._do_toggle(row_key)
-        # Confirm toggle with a brief notification
-        if hasattr(self, 'app') and hasattr(self.app, 'notify'):
-            pass  # Notifications are too noisy for every Space press
+        item = event.item
+        key = item.book_key
+        if not key:
+            return
 
-    def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
-        """Enter/click: toggle selection."""
-        self._do_toggle(event.row_key)
+        app = self.app
+        if not app or not hasattr(app, 'selected_keys'):
+            return
 
-    def _do_toggle(self, row_key) -> None:
-        """Toggle checkmark and notify app."""
-        try:
-            row = self.get_row(row_key)
-            name = str(row[1])
-            if not name or name.startswith("📂") or name.startswith("展开"):
-                return
+        # Toggle in app state
+        if key in app.selected_keys:
+            app.selected_keys.discard(key)
+        else:
+            app.selected_keys.add(key)
+            bk = self._all_groups.get(key, {})
+            if bk and hasattr(app, 'focused_book'):
+                app.focused_book = bk
 
-            current = str(row[0])
+        # Recalculate size
+        if hasattr(app, 'estimated_size'):
+            app.estimated_size = sum(
+                d["size"] for d in self._all_groups.values()
+                if d["key"] in app.selected_keys
+            )
+
+        # Sync _catalog_books
+        if hasattr(app, '_catalog_books'):
+            app._catalog_books = list(self._all_groups.values())
+
+        # Update status bar
+        if hasattr(app, '_update_status_bar'):
+            app._update_status_bar()
+
+        # Refresh this item's display
+        self._refresh_item(item, key)
+
+        # Stop event propagation
+        event.stop()
+
+    def on_list_view_highlighted(self, event: ListView.Highlighted) -> None:
+        """Update detail panel and focused_book when highlight changes."""
+        if not event.item or not isinstance(event.item, BookItem):
+            return
+        key = event.item.book_key
+        if not key:
+            return
+        bk = self._all_groups.get(key, {})
+        if bk:
             app = self.app
+            if app and hasattr(app, 'focused_book'):
+                app.focused_book = bk
 
-            # Find book data
-            bk_data = None
-            for d in self._all_groups.values():
-                if d["name"] == name:
-                    bk_data = d
-                    break
-            if not bk_data:
-                return
-
-            if current == "☑":
-                # Deselect
-                self.update_cell(row_key, "", "⬜")
-                if hasattr(app, 'selected_keys'):
-                    app.selected_keys.discard(bk_data["key"])
-            else:
-                # Select
-                self.update_cell(row_key, "", "☑")
-                if hasattr(app, 'selected_keys'):
-                    app.selected_keys.add(bk_data["key"])
-                if hasattr(app, 'focused_book'):
-                    app.focused_book = bk_data
-                self.post_message(BookFocused(book_data=bk_data))
-
-            # Update estimated size and status bar
-            if hasattr(app, '_catalog_books'):
-                app._catalog_books = list(self._all_groups.values())
-            if hasattr(app, 'estimated_size'):
-                app.estimated_size = sum(
-                    d["size"] for d in self._all_groups.values()
-                    if d["key"] in getattr(app, 'selected_keys', set())
-                )
-            if hasattr(app, '_update_status_bar'):
-                app._update_status_bar()
-
-        except Exception as e:
-            import traceback
-            traceback.print_exc()
-
-    # ── Focus ────────────────────────────────────────────────
-
-    def on_data_table_row_highlighted(self, event: DataTable.RowHighlighted) -> None:
-        """Update detail panel on row focus."""
-        if event.row_key is None:
-            return
+    def _refresh_item(self, item: BookItem, key: str) -> None:
+        """Update a BookItem's checkmark display."""
+        app = self.app
+        selected = key in app.selected_keys if app and hasattr(app, 'selected_keys') else False
+        item._selected = selected
         try:
-            row = self.get_row(event.row_key)
-            name = str(row[1])
-            for d in self._all_groups.values():
-                if d["name"] == name:
-                    app = self.app
-                    if hasattr(app, 'focused_book'):
-                        app.focused_book = d
-                    self.post_message(BookFocused(book_data=d))
-                    break
+            item.remove_children()
+            item.compose()
+            item.mount()
         except Exception:
             pass

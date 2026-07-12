@@ -71,19 +71,22 @@ Header {
     background: $border;
 }
 
-/* ── DataTable ──────────────────────────────────────────────── */
-#book-list DataTable {
+/* ── ListView ─────────────────────────────────────────────── */
+#book-list ListView {
     background: $surface;
 }
 
-#book-list DataTable > .datatable--header {
-    background: $border;
-    color: $accent;
-    text-style: bold;
+#book-list ListView > ListItem {
+    padding: 0 1;
+    color: $text;
 }
 
-#book-list DataTable > .datatable--cursor {
+#book-list ListView > ListItem.--highlight {
     background: $border;
+}
+
+#book-list ListView > ListItem > Static {
+    background: transparent;
 }
 
 /* ── Detail Panel ──────────────────────────────────────────── */

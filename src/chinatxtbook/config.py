@@ -12,6 +12,7 @@ GITHUB_REPO = "https://github.com/TapXWorld/ChinaTextbook.git"
 
 # Workspace and state files
 WORK_DIR = Path("ChinaTextbook_Workspace")
+OUTPUT_DIR = Path("ChinaTextbook_Output")
 STATE_FILE = Path("china_textbook_state.json")
 LOG_FILE = Path("china_textbook.log")
 REPORT_FILE = Path("china_textbook_report.md")

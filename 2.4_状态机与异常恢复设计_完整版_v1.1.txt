@@ -1,0 +1,889 @@
+
+===== D:\TextBook\2.4_状态机与异常恢复设计_完整版_v1.1.docx =====
+ChinaTextbook v1.1 状态机与异常恢复设计（2.4）
+版本： 1.1状态： 开发评审版日期： 2026-07-12范围： 第二批交付：2.4 完整版
+目录
+文档控制
+1. 目的与范围
+2. 设计原则
+3. 状态机总览
+4. 状态所有权与写入纪律
+4.1 唯一所有者
+4.2 Compare-and-set
+4.3 持久化顺序
+5. TaskState 生命周期
+5.1 规范状态
+5.2 允许转换
+5.3 禁止转换
+5.4 时间不变量
+6. TaskStage 阶段状态机
+6.1 规范阶段
+6.2 允许推进
+6.3 阶段失败记录
+6.4 TaskKind 与阶段矩阵
+7. 单本教材的运行期状态
+7.1 批量任务策略
+8. GroupRecord 生命周期
+8.1 持久状态
+8.2 ready 进入条件
+8.3 ready → stale
+8.4 重建失败时的保留策略
+8.5 重新验证
+9. Selection 与 DownloadPlan 生命周期
+9.1 SelectionState
+9.2 DownloadPlan
+10. Catalog 与更新状态
+10.1 缓存失败
+10.2 软件更新提示
+11. 启动与崩溃恢复状态机
+11.1 启动顺序
+11.2 安全模式
+11.3 活动任务校正
+11.4 临时文件处理
+12. 协作式取消与安全点
+12.1 取消协议
+12.2 阶段安全点
+12.3 强制退出
+13. 错误分类与重试策略
+13.1 错误类别
+13.2 自动重试预算
+13.3 同 task_id 与新 task_id
+14. 失败传播和任务结果
+14.1 全局错误
+14.2 单书错误
+14.3 错误覆盖规则
+15. 异常恢复矩阵
+16. 幂等、恢复和发布规则
+16.1 幂等键
+16.2 临时到正式发布
+16.3 清理幂等
+17. 并发、锁和竞态处理
+17.1 并发原则
+17.2 锁顺序
+17.3 完成与取消竞争
+18. 超时、心跳和卡死检测
+19. 应用事件与 UI 映射
+19.1 规范事件
+19.2 UI 显示优先级
+20. 日志、诊断与审计
+21. 参考实现伪代码
+21.1 任务转换
+21.2 Worker 主循环
+21.3 失败处理
+22. 测试与故障注入要求
+22.1 状态转换单元测试
+22.2 阶段测试
+22.3 故障注入
+22.4 恢复验收
+23. 性能与容量约束
+24. 架构评审清单
+25. 交付文件说明
+附录 A：TaskState 规范转换摘要
+附录 B：错误码扩展
+附录 C：状态命名边界
+文档控制
+项目
+内容
+文档用途
+冻结任务、下载阶段、本地成品、目录、启动恢复和取消流程的状态机；定义异常分类、重试、恢复、幂等和持久化规则。
+主要读者
+技术负责人、Python/Textual 开发人员、测试人员、运维与代码评审人员。
+前置文档
+2.1《系统总体架构设计》、2.2《模块设计说明》、2.3《数据模型与状态文件设计》。
+后续文档
+2.5 Git/下载/更新流程、2.6 Worker/日志/配置、测试与发布规范。
+规范级别
+“必须/不得”为强制要求；状态转换表和异常恢复矩阵是实现与测试的基线。
+1. 目的与范围
+本文件定义 ChinaTextbook v1.1 在正常运行、用户取消、网络故障、数据完整性异常、状态文件损坏和进程崩溃时如何流转与恢复。目标是让 UI、Worker、Core 和 StateRepository 对“当前处于什么状态、下一步允许做什么、失败后保留什么”具有一致理解。
+本文件覆盖：
+TaskRecord 的生命周期状态机；
+TaskStage 的阶段推进规则；
+下载任务中一本教材的运行期状态；
+GroupRecord 的 ready/stale/failed 生命周期；
+Catalog、Selection、DownloadPlan 和启动过程的状态规则；
+协作式取消、安全点、超时和子进程终止；
+错误分类、自动重试、人工恢复和 fail-closed；
+崩溃恢复、幂等执行、临时文件与锁；
+应用事件、日志、诊断和故障注入测试。
+本文件不改变 2.3 已冻结的持久化字段。若实现需要新增字段，必须先更新 2.3、Schema 和迁移规则，不得只在代码中私自扩展状态文件。
+2. 设计原则
+状态是事实，不是提示文字。 所有状态必须有明确所有者、进入条件、退出条件和持久化规则。
+终态不可原地复活。 completed、failed、cancelled、interrupted 不得改回 running；重试必须创建新的 task_id，并记录 retry_of。
+完成必须可证明。 Task completed 必须以输出验证和状态原子保存成功为前提；100% 进度不等于完成。
+取消是协作式事务。 用户请求取消后先进入 cancelling，Worker 在安全点停止并保存恢复信息，不能直接杀线程。
+完整性错误优先 fail-closed。 上游删卷、来源清单不可信、路径越界和哈希不一致不得通过自动重试掩盖。
+旧可信成品优先保留。 新版本重建失败不得覆盖或删除已有 ready/stale 成品及其哈希证据。
+恢复依赖真实世界校验。 重启后不得仅相信 state.json；必须重新检查文件、Git 工作区、锁、临时文件和哈希。
+重复执行必须幂等。 同一计划重跑不能产生重复输出、错误删除或状态倒退。
+自动重试有限且可观测。 只有明确可重试错误可自动重试，并受次数、退避和总时限约束。
+所有跨线程变化通过事件传递。 Worker 不直接修改 Widget；UI 根据不可变快照渲染。
+3. 状态机总览
+系统同时存在多组互相关联但所有权不同的状态：
+状态域
+所有者
+是否持久化
+说明
+TaskState / TaskStage
+TaskRegistry + StateRepository
+是
+后台任务生命周期与当前阶段。
+SelectionState
+SelectionService + StateRepository
+是
+用户书目选择及精确文件展开。
+DownloadPlan
+DownloadService
+运行中必须可恢复
+用户确认时冻结的不可变执行快照。
+GroupStatus
+GroupRepository/StateRepository
+是
+本地成品及可信验证证据。
+CatalogRuntimeState
+BookService/CatalogService
+部分
+目录加载、缓存和刷新状态。
+BookStatus
+ViewModel 派生
+否
+available/selected/running/ready/stale/failed 等 UI 状态。
+BootstrapState
+BootstrapController
+否
+启动、迁移、校正和安全模式。
+禁止用一个通用字符串 status 同时表达上述不同状态域。代码中必须使用不同枚举类型，避免把 TaskState.ready、GroupStatus.completed 等无效组合编译进系统。
+4. 状态所有权与写入纪律
+4.1 唯一所有者
+TaskRegistry 是活动任务的内存真相来源；StateRepository 保存其持久快照。
+SelectionService 是当前选择的唯一修改入口。
+GroupRecord 只能由验证/发布事务写入；Downloader 和 UI 无权直接标记 ready。
+BootstrapController 只能执行启动校正，不能在正常运行时修改业务状态。
+UI 只发送 Command，接收 Event/ViewModel，不拥有可持久业务状态。
+4.2 Compare-and-set
+状态转换必须通过带预期旧状态的原子接口完成，例如：
+transition(task_id, expected=TaskState.RUNNING, target=TaskState.CANCELLING)
+若实际状态与 expected 不一致，返回 TASK_STATE_CONFLICT，不得覆盖。该规则避免取消、完成和失败同时竞争导致终态被覆盖。
+4.3 持久化顺序
+需要持久化的状态转换遵循：
+在内存中验证转换是否合法；
+构建新不可变快照；
+通过 StateRepository 原子写入；
+写入成功后替换内存公开快照；
+发布 TaskStateChanged 或其他应用事件。
+对于高频进度可采用节流持久化，但状态、阶段边界和错误必须立即持久化。
+5. TaskState 生命周期
+5.1 规范状态
+状态
+含义
+是否终态
+持久化要求
+pending
+已创建、等待 Worker 执行。
+否
+创建后立即保存。
+running
+Worker 已获得执行权，任务正在推进。
+否
+started_at 与初始 stage 必须保存。
+cancelling
+已收到取消请求，等待安全停止。
+否
+cancel_requested=true 与时间必须保存。
+completed
+所有必要阶段完成，结果和状态均已成功提交。
+是
+stage 必须为 done。
+failed
+任务不能安全继续，或重试预算耗尽。
+是
+必须有 TaskError。
+cancelled
+用户取消已在安全点完成。
+是
+必须记录取消阶段和完成时间。
+interrupted
+上次进程异常结束，旧活动任务不再运行。
+是
+由启动校正写入。
+5.2 允许转换
+来源
+目标
+触发
+守卫条件
+副作用
+pending
+running
+WorkerStart
+未取消；并发槽可用；计划可加载
+写 started_at；stage=preflight 或 queued。
+pending
+cancelled
+CancelBeforeStart
+用户请求取消
+不启动 Worker；写 completed_at。
+pending
+interrupted
+StartupReconcile
+状态来自旧进程
+写 TASK_INTERRUPTED。
+running
+cancelling
+CancelRequested
+当前任务可取消
+cancel_requested=true；停止领取新工作。
+running
+completed
+ExecutionSucceeded
+stage=done；所有结果已验证并持久化
+写 completed_at；发布完成事件。
+running
+failed
+ExecutionFailed
+错误不可恢复或重试耗尽
+保存 TaskError；保留诊断材料。
+running
+interrupted
+StartupReconcile
+重启发现旧 running
+保留 last_stage；写中断原因。
+cancelling
+cancelled
+SafeCancelCompleted
+已到安全点且状态保存成功
+清理任务临时材料；发布取消事件。
+cancelling
+failed
+CancelFailed
+无法安全清理、终止或保存
+写具体错误，提示人工检查。
+cancelling
+interrupted
+StartupReconcile
+重启发现旧 cancelling
+标记 interrupted，不假装取消完成。
+5.3 禁止转换
+terminal → running；
+failed → completed；
+cancelled → completed；
+interrupted → running；
+pending → completed；
+cancelling → completed；
+completed → failed。
+用户点击“重试”时创建新 TaskRecord：state=pending、retry_of=<旧 task_id>，旧记录保持不变。
+5.4 时间不变量
+created_at 必须存在；
+running 必须有 started_at；
+终态必须有 completed_at；
+completed_at >= started_at >= created_at；
+pending 不得有 started_at；
+同一状态转换的时间使用注入 Clock，便于测试；
+系统时间倒退时记录警告，但排序优先使用单调时钟的运行期序号。
+6. TaskStage 阶段状态机
+6.1 规范阶段
+阶段
+目的
+完成证据
+queued
+等待执行。
+Worker 接管任务。
+preflight
+校验计划、锁、磁盘、路径、工作区和工具。
+全部前置条件通过。
+fetch
+获取远端对象和最新引用。
+Git 命令成功且目标 commit 可解析。
+checkout
+配置并执行精确文件 sparse-checkout。
+选定源文件存在且工作区与 fingerprint 匹配。
+merge
+普通 PDF 规范化复制；分卷顺序合并到临时文件。
+临时成品存在、非空、写入完成。
+verify
+校验来源集合、大小、流式哈希和落盘后 SHA256。
+验证结果成功。
+cleanup
+在 verify 成功后按策略清理分卷。
+删除范围再次验证且操作完成。
+persist
+原子保存 GroupRecord、TaskRecord 和相关证据。
+状态替换成功并可重新读取。
+done
+完成标记。
+Task 可转 completed。
+6.2 允许推进
+queued → preflight → fetch → checkout → merge → verify → cleanup → persist → done
+允许的条件分支：
+无需 fetch：preflight → checkout；
+普通完整 PDF：checkout → verify；
+clean_parts_after_verify=false：verify → persist；
+verify-only 任务：preflight → verify → persist → done；
+catalog/update-check 任务按 6.4 的阶段矩阵执行。
+禁止跳过 verify 直接进入 cleanup 或 persist-ready。任何 GroupRecord ready 都必须经过 verify。
+6.3 阶段失败记录
+Task failed/cancelled/interrupted 时，stage 保留最后正在执行或最后成功提交的阶段，用于恢复和诊断。只有 completed 任务的 stage 必须为 done。
+6.4 TaskKind 与阶段矩阵
+TaskKind
+必须阶段
+可选阶段
+不适用阶段
+catalog_refresh
+queued, preflight, fetch, persist, done
+无
+checkout, merge, verify, cleanup
+download
+queued, preflight, checkout, verify, persist, done
+fetch, merge, cleanup
+无
+verify
+queued, preflight, verify, persist, done
+无
+fetch, checkout, merge, cleanup
+update_check
+queued, preflight, fetch, persist, done
+无
+checkout, merge, verify, cleanup
+repository_update
+queued, preflight, fetch, persist, done
+checkout（仅工作区需要同步时）
+merge, verify, cleanup
+diagnostic
+queued, preflight, persist, done
+无
+fetch, checkout, merge, verify, cleanup
+实现不得用一个固定流水线强迫所有 TaskKind 执行无关阶段；应由 StagePlan 明确列出本任务阶段序列。
+7. 单本教材的运行期状态
+BookStatus 是 UI 派生状态，不应替代任务内部的单本处理进度。下载任务可在内存事件中使用以下 BookRunState，默认不写入 state.json：
+状态
+说明
+waiting
+已在 DownloadPlan 中，等待处理。
+skipped_ready
+本地 ready 记录和真实文件均验证通过，无需重建。
+active
+正在 fetch/checkout/merge/verify/persist 的某阶段。
+ready
+本任务已为该书建立可信 GroupRecord。
+failed
+该书处理失败，TaskError 包含 book_id。
+cancelled
+取消后尚未处理或安全停止。
+7.1 批量任务策略
+默认采用“单本失败不继续危险写入，但可继续独立书目”的策略：
+目录/工作区/状态存储等全局错误：整个任务失败；
+某一本教材的确定性源文件错误：记录该书失败，其他不共享临时材料的书可继续；
+完整性/路径越界/Manifest 不可信：为避免共享环境受污染，整个任务 fail-closed；
+最终 TaskState：全部成功或安全跳过为 completed；存在任一本失败为 failed，但成功书目的 ready 记录仍保留。
+8. GroupRecord 生命周期
+8.1 持久状态
+不存在： 没有 GroupRecord；
+ready： 成品存在、哈希和来源证据完整；
+stale： 成品证据仍保留，但当前来源或本地文件发生变化；
+failed： 当前无可信 ready/stale 成品，最近构建失败。
+candidate、revalidating 等仅为运行期状态，不写入 GroupStatus。
+8.2 ready 进入条件
+仅当以下全部成功时可写 ready：
+来源路径与当前 Catalog/Manifest 一致；
+分卷集合连续且未减少；
+临时成品完整写入；
+流式哈希与落盘后重新读取哈希一致；
+输出路径位于允许根目录；
+GroupRecord 原子保存成功。
+8.3 ready → stale
+触发包括：
+source_files、OID、commit 或 fingerprint 改变；
+本地文件不存在、大小变化或哈希不匹配；
+工作区切换到不一致仓库；
+无法可靠比较新旧 Manifest；
+旧迁移记录缺少足够来源证据。
+stale 不是失败删除信号。系统必须保留输出文件、旧 SHA256 和 source_parts，直到用户明确处理。
+8.4 重建失败时的保留策略
+若重建前存在 ready，检测到变化后先标记 stale；新任务失败后继续保持 stale，不改为 failed。
+若重建前没有可信输出，任务失败可写 GroupStatus=failed。
+上游分卷减少时保持 stale，并产生 UPSTREAM_PART_REMOVED；禁止自动以更短集合覆盖。
+8.5 重新验证
+ready/stale 的本地文件可执行 verify 任务：
+与记录哈希一致且来源仍有效：写 ready，并更新 verified_at；
+文件哈希不一致：写 stale，错误 OUTPUT_HASH_MISMATCH；
+文件不存在：写 stale；不得自动删除记录。
+9. Selection 与 DownloadPlan 生命周期
+9.1 SelectionState
+选择处于可编辑状态，任何变更都重新展开 selected_files 并计算 fingerprint。Catalog 刷新后：
+selected_books 全部仍存在：重新展开并更新 fingerprint；
+有 BookId 消失：保留仍存在项，设置 requires_reselection=true，提示用户复核；
+v1.0 升级：清空目录级选择并要求重选。
+9.2 DownloadPlan
+用户按 F5 并确认后创建不可变 DownloadPlan：
+selection editable → plan frozen → task pending → task terminal
+计划冻结后 UI 修改选择不影响当前任务。若计划中的 repository_commit、catalog_fingerprint 或 selection_fingerprint 在 preflight 无法验证，任务以 PLAN_SNAPSHOT_MISMATCH 失败并要求重新创建计划。
+DownloadPlan 不允许被“更新”；重新下载必须创建新 plan_id。
+10. Catalog 与更新状态
+CatalogRuntimeState 建议为运行期枚举：
+状态
+说明
+unavailable
+尚无可用目录。
+loading
+正在加载缓存或解析 Git Tree。
+ready
+当前 commit 的目录可用。
+stale
+有可用旧目录，但远端/工作区已变化。
+failed
+本次刷新失败且无可用目录。
+10.1 缓存失败
+Catalog cache 解析、Schema 或 fingerprint 失败时直接丢弃缓存并重建；不得影响 state.json 的 groups。若重建失败但旧内存目录仍存在，可进入 stale 并允许浏览，不允许基于不匹配目录创建新下载计划。
+10.2 软件更新提示
+UpdateCheck 失败不影响教材浏览和本地文件使用；错误只进入日志/更新页面。软件升级提示不得自动覆盖当前程序。
+11. 启动与崩溃恢复状态机
+11.1 启动顺序
+建立最小日志和路径环境；
+获取工作区写锁；
+限制大小读取配置和 state.json；
+执行 Schema 校验、备份恢复或迁移；
+将旧 pending/running/cancelling 任务校正为 interrupted；
+检查临时状态文件和任务临时目录；
+验证工作区是官方仓库且路径不越界；
+加载 Catalog cache 或重建；
+派生 BookStatus 和恢复建议；
+进入 BrowserScreen 或安全模式。
+11.2 安全模式
+以下情况进入安全模式：
+未知 schema_version；
+主状态、备份和可验证临时文件均不可用；
+工作区指向非官方仓库或无法证明身份；
+路径配置越界；
+迁移失败；
+Catalog 不可用且无可信缓存。
+安全模式只允许：帮助、日志、诊断导出、选择可信备份、重新初始化工作区、选择新输出目录和退出。不得下载、合并、清理分卷或覆盖状态。
+11.3 活动任务校正
+启动时读取到 pending/running/cancelling：
+原记录转为 interrupted；
+保留 last stage、progress、plan_id 和临时路径摘要；
+写 TASK_INTERRUPTED；
+检查是否存在可恢复材料；
+用户选择“恢复”时创建新任务，不恢复旧 task_id。
+11.4 临时文件处理
+.tmp.<task_id> 只能由同一任务或恢复任务认领；
+临时文件不得自动发布为成品；
+若临时文件完整并可重新验证，可作为新任务输入以节省重做；
+无法关联、路径不安全或验证失败的临时文件移入 quarantine 或保留提示，不自动删除；
+状态临时文件只有在主文件损坏且完整通过 Schema/业务校验时才可人工恢复。
+12. 协作式取消与安全点
+12.1 取消协议
+UI 发送 CancelTaskCommand；
+TaskRegistry compare-and-set running → cancelling；
+设置 cancel_requested 并持久化；
+Worker 停止领取新的 Book 和新的阶段；
+当前操作到达安全点；
+关闭文件句柄、刷盘、终止/等待子进程；
+清理仅属于当前任务且未发布的临时材料；
+保存恢复信息；
+cancelling → cancelled；
+发布 TaskCancelled。
+12.2 阶段安全点
+阶段
+允许立即取消
+安全点与处理
+queued/pending
+是
+不启动 Worker，直接 cancelled。
+preflight
+是
+当前检查完成后停止，无业务文件副作用。
+fetch
+否，协作式
+请求 Git 温和终止；等待子进程退出并检查仓库锁。
+checkout
+否，协作式
+完成当前 Git 操作，验证工作树可解析后停止。
+merge
+否，协作式
+停止读取下一块，关闭临时输出；未发布文件可清理或保留恢复。
+verify
+否，协作式
+完成本轮文件读取或在块边界停止；不得把部分哈希当结果。
+cleanup
+仅删除前
+一旦开始删除单个文件，完成该原子删除；继续前再检查取消。
+persist
+事务边界
+原子替换开始后必须完成或报告失败，不能留下半状态。
+12.3 强制退出
+UI 在任务活动时收到 Q：
+首次提示“安全取消并退出”；
+用户确认后触发取消协议；
+只有全部任务到达终态或超出退出等待上限后才能结束；
+超时可提供“强制退出”，但必须明确说明下次启动会标记 interrupted，并尽力写 emergency marker；
+禁止使用 Python 线程强杀。
+13. 错误分类与重试策略
+13.1 错误类别
+类别
+例子
+默认策略
+transient
+临时网络断开、远端限流、短暂文件占用
+有限自动重试。
+environment
+Git 缺失、磁盘不足、权限错误、锁被占用
+修复环境后人工重试。
+deterministic_input
+分卷断号、混合普通/分卷、选择丢失
+不自动重试；刷新或修复输入。
+integrity
+上游删卷、Manifest 不可信、哈希不一致、路径越界
+立即 fail-closed，保留证据。
+persistence
+状态 Schema/锁/原子写入失败
+有限本地重试；失败后不得宣告完成。
+cancellation
+用户取消
+安全取消，不视为错误。
+interruption
+进程崩溃、系统关机、强制退出
+启动校正为 interrupted。
+internal_bug
+不变量违反、未处理异常
+任务失败，导出诊断，禁止自动循环。
+13.2 自动重试预算
+建议默认：
+网络类：最多 3 次，退避 1s、3s、9s，并加入 0–20% 抖动；
+State 原子写入：最多 2 次短退避，仍失败则任务 failed；
+Git 子进程临时锁：确认锁不属于活跃进程后最多 1 次；
+单次命令和整个任务均设置最大时限；
+自动重试次数、下一次时间和最后错误写入进度/日志。
+不得自动重试：UPSTREAM_PART_REMOVED、CATALOG_PATH_INVALID、CATALOG_PART_GAP、CATALOG_MIXED_SOURCE、OUTPUT_HASH_MISMATCH 的同一未清理产物、未知 Schema、路径越界和错误仓库。
+13.3 同 task_id 与新 task_id
+同一 Worker 内的短暂命令重试使用同 task_id；
+任务进入终态后的用户重试必须新建 task_id；
+新任务记录 retry_of，便于诊断和统计；
+重试不得覆盖旧错误记录。
+14. 失败传播和任务结果
+14.1 全局错误
+以下错误使整个任务失败：
+工作区或仓库身份不可信；
+StateRepository 无法保存；
+选择/计划快照不一致；
+Manifest 全局不可用；
+路径边界或安全检查失败；
+Git 工作区处于无法证明安全的锁/冲突状态。
+14.2 单书错误
+某 Book 的源分卷自身不完整、合并失败或输出写入失败，可记录书目级 TaskError。若共享环境仍可信，其他 Book 可继续；最终任务 failed，UI 显示成功、失败和跳过数量。
+14.3 错误覆盖规则
+保留第一个根因错误；
+后续清理错误作为 secondary_errors 写日志，不覆盖 root TaskError；
+若状态保存失败，STATE_WRITE_FAILED 升级为任务根因，因为无法可靠提交其他结果；
+错误摘要必须脱敏且不超过 500 字符；完整堆栈只进日志。
+15. 异常恢复矩阵
+详细矩阵同时交付在 tables/2.4_状态转换与异常恢复矩阵.xlsx。核心规则如下：
+错误码
+自动重试
+状态结果
+保留内容
+用户操作
+GIT_NETWORK_TRANSIENT
+是，最多 3 次
+running；耗尽后 failed
+已完成对象、旧 ready 输出
+检查网络后重试。
+MANIFEST_UNAVAILABLE
+有限
+failed
+旧输出与旧清单证据
+刷新目录/工作区后重试。
+UPSTREAM_PART_REMOVED
+否
+failed；Group 保持 stale
+旧完整 PDF、hash、parts
+人工确认上游变化。
+OUTPUT_HASH_MISMATCH
+否自动覆盖
+failed；Group stale/failed
+不一致文件和诊断信息
+重新下载/验证，不自动删除旧可信文件。
+DISK_SPACE_INSUFFICIENT
+否
+failed
+已验证输出、可恢复临时文件
+释放空间或换目录。
+STATE_WRITE_FAILED
+本地最多 2 次
+failed
+旧有效 state、业务文件
+修复权限/磁盘后重试；不得显示完成。
+STATE_SCHEMA_INVALID
+否
+safe mode
+原文件、备份、诊断
+选择备份或迁移。
+TASK_INTERRUPTED
+否自动继续
+interrupted
+计划、阶段、临时材料
+创建恢复任务。
+CHECKOUT_MISMATCH
+是，清理配置后一次
+failed
+旧 ready 输出
+重建 sparse 配置后重试。
+OUTPUT_PERMISSION_DENIED
+否
+failed
+已有输出不动
+修改权限或输出目录。
+16. 幂等、恢复和发布规则
+16.1 幂等键
+建议操作幂等键：
+repository_commit + selection_fingerprint + logical_path + options_fingerprint
+相同键且已有真实文件验证通过时，可安全跳过为 skipped_ready。仅有状态布尔值不足以跳过，必须检查文件存在、大小和 SHA256。
+16.2 临时到正式发布
+合并/复制输出写到同文件系统临时路径；
+完整验证临时文件；
+若目标已有 ready 文件，先保留，不直接覆盖；
+使用原子 replace 发布；必要时创建短期备份；
+发布后重新读取验证；
+最后保存 GroupRecord；
+任一步失败不得删除旧可信成品。
+16.3 清理幂等
+清理分卷前必须重新验证：
+verify 已成功；
+GroupRecord 即将/已经安全提交；
+删除路径属于当前 Book 的 source_files；
+文件位于允许工作区；
+不包含成品 PDF、状态文件、日志或其他 Book 文件。
+重复清理遇到文件不存在可视为成功；路径不匹配必须失败。
+17. 并发、锁和竞态处理
+17.1 并发原则
+一个工作区只允许一个可写应用实例；
+同一时间最多一个 repository_update/catalog_refresh 修改 Git 工作区；
+下载任务默认串行执行 Git checkout，合并/哈希可在资源允许时有限并行；
+同一个 logical_path 同时只能有一个构建/验证任务；
+UI 查询只读取不可变 TaskSnapshot。
+17.2 锁顺序
+为避免死锁，固定顺序：
+workspace lock → task registry lock → logical_path lock → state repository lock
+不得反向获取。文件哈希和 Git 子进程运行期间不长期持有全局 TaskRegistry 锁。
+17.3 完成与取消竞争
+若 Worker 已进入 persist 事务，取消请求记录但不得中断原子提交。提交成功后：
+若业务已完整完成，任务可 completed，并提示“取消请求到达过晚”；
+若尚有后续书目，当前书发布完成后进入 cancelled；
+compare-and-set 保证 completed/cancelled 只有一个终态获胜。
+18. 超时、心跳和卡死检测
+Git 命令必须有空闲超时与总超时；持续输出进度会重置空闲计时。
+Worker 每 5 秒或阶段变化发布 heartbeat；UI 10 秒未收到更新可显示“无新进度”，但不得直接判失败。
+超过配置的 watchdog 阈值时先收集诊断，再请求协作取消；
+强制终止 Git 后必须检查 .git/index.lock、工作区状态和路径清单；
+哈希/合并按块处理并周期检查 cancel token。
+默认阈值属于配置项，由 2.6 冻结；本文件只规定必须存在超时和诊断机制。
+19. 应用事件与 UI 映射
+19.1 规范事件
+事件
+关键字段
+UI 用途
+TaskCreated
+task_id, kind, created_at
+任务中心新增。
+TaskStateChanged
+old_state, new_state, stage
+更新状态标签。
+TaskStageChanged
+old_stage, new_stage, book_id
+更新当前阶段和教材。
+TaskProgressed
+progress, estimated
+更新进度条和速度。
+TaskRetryScheduled
+attempt, next_at, error_code
+显示自动重试倒计时。
+TaskCompleted
+result_summary
+完成通知和统计。
+TaskFailed
+TaskError
+错误提示与重试按钮。
+TaskCancelled
+last_stage
+取消提示。
+GroupStatusChanged
+logical_path, old, new, reason
+刷新文件详情。
+CatalogStateChanged
+old, new, commit
+更新顶部目录状态。
+RecoveryAvailable
+interrupted_task_id, materials
+启动恢复提示。
+事件对象必须不可变，不携带文件句柄、异常对象或 Token。高频进度事件可合并，状态/阶段/错误事件不得丢弃。
+19.2 UI 显示优先级
+BookStatus 显示优先级沿用 2.3：
+running > failed > stale > ready > selected > available
+cancelling 显示为“正在安全取消”；
+interrupted 显示为“上次任务中断，可恢复”；
+Git 估算进度必须标注“估算”；
+Task completed 但存在书目失败是不允许的：此类批量结果应为 Task failed，并显示部分成功统计。
+20. 日志、诊断与审计
+每次状态变化记录结构化日志：
+timestamp, task_id, task_kind, old_state, new_state, old_stage,new_stage, book_id, error_code, attempt, duration_ms
+要求：
+正常进度不重复刷屏，阶段变化必记；
+自动重试记录原因、次数和下次时间；
+取消记录请求时间、安全点时间和完成时间；
+崩溃恢复记录旧状态、临时材料和决定；
+任何 URL、Token、Authorization 和代理密码必须脱敏；
+诊断导出包含状态机事件摘要，但不包含用户教材内容。
+21. 参考实现伪代码
+21.1 任务转换
+def transition_task(task_id, expected, target, *, stage=None, error=None):    with task_registry.transaction(task_id) as current:        if current.state is not expected:            raise TaskStateConflict(current.state, expected, target)        validate_transition(current, target, stage=stage, error=error)        updated = evolve(current, state=target, stage=stage or current.stage)        state_repository.save_task_snapshot(updated)        task_registry.publish(updated)    event_bus.post(TaskStateChanged.from_records(current, updated))
+21.2 Worker 主循环
+for stage in stage_plan:    cancellation.raise_before_new_stage()    set_stage(stage)    execute_stage(stage, cancellation)set_stage(TaskStage.DONE)transition_task(task_id, RUNNING, COMPLETED)
+21.3 失败处理
+try:    run_task()except CancellationAtSafePoint:    finalize_cancel()except DomainError as exc:    if retry_policy.can_retry(exc, attempt, stage):        schedule_retry(exc)    else:        fail_task(exc.to_task_error())except Exception as exc:    fail_task(internal_error(exc))    export_crash_context()
+22. 测试与故障注入要求
+22.1 状态转换单元测试
+每个允许转换成功；
+每个禁止转换返回 TASK_STATE_CONFLICT/INVALID_TRANSITION；
+终态不可复活；
+completed 必须 stage=done 且无 error；
+failed 必须有 error；
+cancelling/cancelled 必须有 cancel_requested；
+时间字段不变量；
+compare-and-set 竞争测试。
+22.2 阶段测试
+普通 PDF 跳过 merge；
+分卷必须经过 merge 与 verify；
+cleanup=false 跳过 cleanup；
+verify 失败不得进入 cleanup/persist-ready；
+persist 失败不得标 completed；
+Catalog/Update/Diagnostic 使用正确 StagePlan。
+22.3 故障注入
+至少覆盖：
+fetch 中断网；
+Git 子进程卡死或返回非零；
+checkout 后源文件缺失；
+merge 写到一半磁盘满；
+verify 中用户取消；
+hash 不匹配；
+上游删除末卷；
+cleanup 删除前进程崩溃；
+state 临时文件 fsync/replace 失败；
+completed 事件发布前进程崩溃；
+启动时状态文件损坏、备份有效；
+running/cancelling 遗留任务；
+双实例竞争工作区锁；
+系统时钟倒退；
+终端 UI 在任务运行时频繁切换页面。
+22.4 恢复验收
+任何故障后旧 ready 成品不丢失；
+不产生未验证却标 ready 的输出；
+不自动删除无法归属的临时文件；
+重启后活动任务全部变 interrupted；
+恢复任务使用新 task_id；
+取消后 UI 保持响应且状态可重新加载；
+状态文件在任一注入点仍有一个可验证版本。
+23. 性能与容量约束
+状态/阶段事件从 Worker 到 UI 的目标延迟小于 200 ms；
+高频进度事件默认最多 10 次/秒，UI 可进一步合并；
+进度持久化默认不高于 1 次/秒或每 1% 变化一次；
+Task history 和 recent failures 继续遵守 2.3 的最多 100 条；
+恢复扫描不得递归遍历不受控目录，只检查已知工作区、输出目录和任务临时目录；
+锁等待和重试不得造成 UI 阻塞。
+24. 架构评审清单
+☐ 是否为每个状态域使用独立枚举和所有者？
+☐ 是否只允许规范转换，终态是否不可复活？
+☐ completed 是否以 verify 和 persist 成功为前提？
+☐ 重试是否创建新任务或遵守短暂命令重试规则？
+☐ 取消是否经过 cancelling 和安全点？
+☐ 是否禁止线程强杀和中断原子替换？
+☐ 上游删卷、路径越界和哈希不一致是否 fail-closed？
+☐ 新任务失败时是否保留旧 ready/stale 成品？
+☐ 重启是否把旧活动任务校正为 interrupted？
+☐ safe mode 是否禁止下载、合并和删除？
+☐ Group ready 是否始终有完整验证证据？
+☐ 同一 logical_path 是否避免并发构建？
+☐ 状态转换是否 compare-and-set 并原子持久化？
+☐ 高频进度与关键事件是否区分处理？
+☐ 所有恢复和取消场景是否有故障注入测试？
+25. 交付文件说明
+文件
+用途
+2.4_状态机与异常恢复设计_完整版_v1.1.docx
+正式评审和批注文档。
+2.4_状态机与异常恢复设计_完整版_v1.1.md
+Markdown 源文件。
+2.4_状态机与异常恢复设计_完整版_v1.1.html
+浏览器阅读版。
+tables/2.4_状态转换与异常恢复矩阵.xlsx
+Task 转换、阶段矩阵、取消点、异常恢复和故障注入用例。
+reference/state_machine_spec.json
+可供实现/合约测试读取的机器状态机规范。
+reference/recovery_policy.json
+错误分类和默认恢复策略。
+reference/state_machine.py
+Python 枚举和转换校验参考骨架。
+diagrams/*.png / *.svg
+状态机、下载、取消、恢复和重试图。
+qa/validation_report.txt
+JSON/代码/文档的机器校验摘要。
+附录 A：TaskState 规范转换摘要
+来源
+允许目标
+pending
+running, cancelled, interrupted
+running
+cancelling, completed, failed, interrupted
+cancelling
+cancelled, failed, interrupted
+completed
+无
+failed
+无
+cancelled
+无
+interrupted
+无
+附录 B：错误码扩展
+在 2.3 错误码基础上补充：
+错误码
+说明
+默认可重试
+INVALID_TRANSITION
+状态转换不在规范表中
+否
+TASK_STATE_CONFLICT
+compare-and-set 发现并发状态变化
+由调用方重新读取
+PLAN_SNAPSHOT_MISMATCH
+DownloadPlan 与当前目录/选择不一致
+否，重建计划
+WORKSPACE_INVALID
+工作区不是预期官方仓库或状态异常
+否，修复后重试
+WORKSPACE_LOCKED
+工作区被另一个活跃实例占用
+否，等待/关闭实例
+GIT_PROCESS_TIMEOUT
+Git 空闲或总时限超时
+是，有限
+DISK_SPACE_INSUFFICIENT
+可用空间不足
+否
+OUTPUT_PERMISSION_DENIED
+输出目录不可写
+否
+TEMP_ARTIFACT_UNSAFE
+临时文件无法安全归属或路径越界
+否
+CANCEL_CLEANUP_FAILED
+取消清理或保存失败
+否，需诊断
+INTERNAL_INVARIANT_BROKEN
+内部不变量被破坏
+否
+附录 C：状态命名边界
+TaskState 只描述任务生命周期；
+TaskStage 只描述任务正在执行的步骤；
+GroupStatus 只描述本地成品证据；
+BookStatus 只用于 UI 派生展示；
+CatalogRuntimeState 与 BootstrapState 默认只在内存中存在；
+不得把 progress.percent=100 当作 TaskState=completed；
+不得把 GroupStatus=ready 当作当前 Catalog 一定未变化；需结合 stale 检测。
