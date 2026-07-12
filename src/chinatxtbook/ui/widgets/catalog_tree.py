@@ -12,7 +12,15 @@ from chinatxtbook.utils.format import fmt_size
 
 
 class CatalogTreeWidget(Tree):
-    """SCR-BROWSE left panel: hierarchical textbook catalog."""
+    """SCR-BROWSE left panel: hierarchical textbook catalog.
+
+    Space: select/deselect book. Enter: show detail overlay.
+    Arrows: navigate. Left/Right: collapse/expand.
+    """
+
+    BINDINGS = [
+        # Space handled via action_toggle_selection
+    ]
 
     def __init__(self, *args, **kwargs):
         super().__init__("📚 教材目录", *args, **kwargs)
@@ -96,22 +104,36 @@ class CatalogTreeWidget(Tree):
 
         self.root.expand()
 
+    def on_key(self, event) -> None:
+        """Handle Space for selection toggle."""
+        if event.key == "space":
+            cursor = self.cursor_line
+            if cursor >= 0:
+                try:
+                    node = self.get_node_at_line(cursor)
+                    if node and node.data and node.data.get("type") == "book":
+                        self._toggle_selection(node)
+                        event.prevent_default()
+                        event.stop()
+                except Exception:
+                    pass
+
     def on_tree_node_selected(self, event: Tree.NodeSelected) -> None:
-        """Space: toggle selection for books. Enter: show detail overlay."""
+        """Enter/click: toggle selection for books."""
         if not event.node or not event.node.data:
             return
-
         data = event.node.data
         if data.get("type") != "book":
             return
-
-        key = data.get("key", "")
-        app = self.app
-
-        # Toggle selection state
-        if hasattr(app, 'toggle_book_selection'):
-            app.toggle_book_selection(key, data)
+        self._toggle_selection(event.node)
         event.stop()
+
+    def _toggle_selection(self, node) -> None:
+        """Toggle a book node's selection state."""
+        key = node.data.get("key", "")
+        app = self.app
+        if hasattr(app, 'toggle_book_selection'):
+            app.toggle_book_selection(key, node.data)
 
     def on_tree_node_highlighted(self, event: Tree.NodeHighlighted) -> None:
         """Update app's focused_book on arrow navigation."""
