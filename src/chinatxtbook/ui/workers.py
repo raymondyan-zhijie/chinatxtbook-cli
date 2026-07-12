@@ -130,25 +130,31 @@ class PipelineWorker:
             all_paths = list(set(all_paths))
             _log(f"Restoring {len(all_paths)} files...")
 
-            # Restore in batches, retrying on lock failures
+            # Restore in batches with retry and network resilience
+            failed_paths = []
             for i in range(0, len(all_paths), 50):
                 batch = all_paths[i:i + 50]
-                for attempt in range(3):
+                for attempt in range(5):  # More retries for network
+                    # Always clean stale locks before git ops
+                    lock = WORK_DIR / ".git" / "index.lock"
+                    lock.unlink(missing_ok=True)
+
                     ok, _, err = git.run(
                         ["restore", "--source=HEAD", "--worktree", "--"] + batch,
-                        allow_fetch=True, retry=1,
+                        allow_fetch=True, retry=3,  # 3 git-level retries
                     )
                     if ok:
                         break
-                    _log(f"restore attempt {attempt+1} failed: {err[:100]}")
-                    # Clean lock file and retry
-                    lock = WORK_DIR / ".git" / "index.lock"
-                    if lock.exists():
-                        lock.unlink(missing_ok=True)
-                        _log("  cleaned index.lock, retrying...")
-                    await asyncio.sleep(1)
+                    _log(f"restore batch {i//50+1} attempt {attempt+1}: {err[:120]}")
+                    await asyncio.sleep(2 * (attempt + 1))  # Exponential backoff
+                else:
+                    failed_paths.extend(batch)
+
                 pct = 20 + int(30 * (i + len(batch)) / max(len(all_paths), 1))
                 self._ui_progress(min(pct, 50), "Downloading")
+
+            if failed_paths:
+                _log(f"Failed to restore {len(failed_paths)} files")
 
             _log("restore done")
         except asyncio.TimeoutError:
