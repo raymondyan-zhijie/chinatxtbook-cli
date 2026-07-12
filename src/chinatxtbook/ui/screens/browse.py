@@ -5,6 +5,7 @@ Right: file details. Bottom: selection status + hints.
 """
 
 from textual.app import ComposeResult
+from textual.binding import Binding
 from textual.containers import Horizontal
 from textual.screen import Screen
 from textual.widgets import Header
@@ -18,6 +19,15 @@ from chinatxtbook.ui.widgets.status_bar import StatusBarWidget
 
 class BrowseScreen(Screen):
     """SCR-BROWSE: directory tree | file list | details."""
+
+    BINDINGS = [
+        Binding("ctrl+a", "select_all", "全选"),
+    ]
+
+    def action_select_all(self):
+        app = self.app
+        if hasattr(app, 'action_select_all'):
+            app.action_select_all()
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)

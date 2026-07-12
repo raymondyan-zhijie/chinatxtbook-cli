@@ -30,21 +30,51 @@ class StateManager:
 
     @staticmethod
     def new_state() -> dict:
-        """Create a fresh state dict. Source: v1.0 lines 297-315."""
+        """Create a fresh v1.1 state dict per design doc 2.3 Section 12."""
         return {
-            "version": VERSION,
+            "schema_version": VERSION,
+            "app_version": VERSION,
+            "version": VERSION,  # backward compat
+            "created_at": datetime.now().isoformat(),
+            "updated_at": None,
             "started_at": datetime.now().isoformat(),
             "last_run": None,
+            # Repository
             "repo_source": None,
             "default_branch": None,
             "clone_done": False,
-            "selection_done": False,
+            # Selection (v1.1 two-layer model)
+            "selection": {
+                "requires_reselection": False,
+                "selected_books": [],
+                "selected_files": [],
+                "fingerprint": None,
+                "updated_at": None,
+            },
             "selected_paths": [],
+            "selection_done": False,
             "selection_fingerprint": None,
             "checkout_done": False,
             "target_dirs": [],
+            # Groups (cross-selection persistent cache)
             "groups": {},
             "last_failures": {},
+            # Tasks
+            "tasks": {"active": [], "history": []},
+            # Preferences
+            "preferences": {
+                "verify_hashes": True,
+                "clean_parts_after_verify": False,
+            },
+            # Updates
+            "updates": {
+                "ignored_software_version": None,
+                "last_software_check_at": None,
+                "last_catalog_check_at": None,
+            },
+            # Migration
+            "migration": None,
+            # Size cache
             "size_cache": None,
         }
 

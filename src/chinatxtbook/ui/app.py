@@ -26,7 +26,7 @@ from chinatxtbook.ui.screens.confirm_overlay import ConfirmOverlay
 BINDINGS = [
     Binding("escape", "go_back", "返回", show=False),
     Binding("slash", "search", "搜索"),
-    Binding("ctrl+a", "select_all", "全选"),
+    # ctrl+a moved to BrowseScreen (prevents conflict with Input text selection)
     Binding("ctrl+d", "deselect_all", "取消"),
     Binding("f1", "show_help", "帮助"),
     Binding("f2", "show_selected", "已选"),

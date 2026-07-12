@@ -122,8 +122,9 @@ class CatalogTreeWidget(Tree):
         self._load_children(node)
         node.data["loaded"] = True
 
-    def on_tree_node_highlighted(self, event: Tree.NodeHighlighted) -> None:
-        """Update center panel when a directory is focused."""
+    def on_tree_node_selected(self, event: Tree.NodeSelected) -> None:
+        """Enter: load files for this directory into center panel.
+        (Design: arrow keys = navigate, Enter = deliberate action to load files)"""
         node = event.node
         if not node or not node.data:
             return
@@ -132,8 +133,7 @@ class CatalogTreeWidget(Tree):
         path = node.data.get("path", "")
         if not path:
             return
-
-        # Tell the center panel to show files for this path
         app = self.app
         if hasattr(app, 'show_directory_files'):
             app.show_directory_files(path)
+        event.stop()
