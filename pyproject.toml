@@ -31,8 +31,8 @@ dev = [
 china-textbook = "chinatxtbook.__main__:main"
 
 [project.urls]
-Homepage = "https://github.com/raymondyan/ChinaTextbook"
-Repository = "https://github.com/raymondyan/ChinaTextbook.git"
+Homepage = "https://github.com/raymondyan-zhijie/chinatxtbook-cli"
+Repository = "https://github.com/raymondyan-zhijie/chinatxtbook-cli.git"
 
 [tool.setuptools.packages.find]
 where = ["src"]

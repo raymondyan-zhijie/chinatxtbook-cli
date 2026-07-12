@@ -1,0 +1,260 @@
+/* ═══════════════════════════════════════════════════════════════
+ * ChinaTextbook v1.1 — Dark Theme
+ * Textual CSS with responsive breakpoints
+ * ═══════════════════════════════════════════════════════════════ */
+
+/* ── Variables ────────────────────────────────────────────── */
+$surface: #1a1a2e;
+$surface-light: #16213e;
+$border: #0f3460;
+$accent: #00d4ff;
+$text: #e0e0e0;
+$text-muted: #8888aa;
+$success: #16c79a;
+$warning: #ffc947;
+$error: #e94560;
+
+/* ── Base ─────────────────────────────────────────────────── */
+Screen {
+    background: $surface;
+    color: $text;
+}
+
+/* ── Header ───────────────────────────────────────────────── */
+Header {
+    background: $surface-light;
+    color: $accent;
+    text-style: bold;
+}
+
+/* ── Main Panel ───────────────────────────────────────────── */
+#main-panel {
+    layout: horizontal;
+    height: 1fr;
+}
+
+#catalog-tree {
+    width: 35%;
+    border: solid $border;
+    background: $surface-light;
+    padding: 0 1;
+}
+
+#book-list {
+    width: 40%;
+    border: solid $border;
+    background: $surface;
+    padding: 0 1;
+}
+
+#detail-panel {
+    width: 25%;
+    border: solid $border;
+    background: $surface-light;
+    padding: 1 1;
+}
+
+/* ── Tree ─────────────────────────────────────────────────── */
+#catalog-tree Tree {
+    background: $surface-light;
+}
+
+#catalog-tree Tree > .tree--label {
+    color: $text;
+}
+
+#catalog-tree Tree > .tree--guides {
+    color: $border;
+}
+
+#catalog-tree Tree > .tree--highlight {
+    background: $border;
+}
+
+/* ── DataTable ──────────────────────────────────────────────── */
+#book-list DataTable {
+    background: $surface;
+}
+
+#book-list DataTable > .datatable--header {
+    background: $border;
+    color: $accent;
+    text-style: bold;
+}
+
+#book-list DataTable > .datatable--cursor {
+    background: $border;
+}
+
+/* ── Detail Panel ──────────────────────────────────────────── */
+#detail-panel Static {
+    background: $surface-light;
+}
+
+#detail-title {
+    color: $accent;
+    text-style: bold;
+    margin-bottom: 1;
+}
+
+#detail-meta {
+    color: $text;
+    margin-bottom: 1;
+}
+
+/* ── Status Bar ────────────────────────────────────────────── */
+#status-bar {
+    height: 1;
+    background: $border;
+    color: $text;
+}
+
+#status-selection {
+    color: $success;
+    text-style: bold;
+}
+
+#status-progress {
+    color: $warning;
+}
+
+#status-shortcuts {
+    color: $text-muted;
+    content-align: right middle;
+}
+
+/* ── Search Overlay ────────────────────────────────────────── */
+#search-overlay {
+    width: 60%;
+    height: auto;
+    max-height: 50%;
+    border: solid $accent;
+    background: $surface-light;
+}
+
+#search-input {
+    background: $surface;
+    color: $text;
+}
+
+#search-results {
+    color: $text;
+    margin-top: 1;
+}
+
+#search-overlay .search-hint {
+    color: $text-muted;
+}
+
+/* ── Modal Screens ─────────────────────────────────────────── */
+.modal-title {
+    color: $accent;
+    text-style: bold;
+    content-align: center middle;
+    height: 1;
+    margin-bottom: 1;
+}
+
+.modal-hint {
+    color: $text-muted;
+    content-align: center middle;
+    height: 1;
+}
+
+.modal-content {
+    color: $text;
+}
+
+.summary-line {
+    color: $accent;
+    text-style: bold;
+}
+
+/* ── Help Screen ───────────────────────────────────────────── */
+#help-screen {
+    width: 75%;
+    height: 85%;
+}
+
+/* ── Log Screen ────────────────────────────────────────────── */
+#log-screen {
+    width: 80%;
+    height: 70%;
+}
+
+#log-screen RichLog {
+    background: #0a0a1a;
+}
+
+/* ── Tasks Screen ──────────────────────────────────────────── */
+#tasks-screen {
+    width: 75%;
+    height: 75%;
+}
+
+.task-stage {
+    color: $accent;
+}
+
+/* ── Selected Screen ───────────────────────────────────────── */
+#selected-screen {
+    width: 65%;
+    height: 75%;
+}
+
+/* ── Confirm Overlay ───────────────────────────────────────── */
+#confirm-overlay {
+    width: 55%;
+    height: auto;
+    border: solid $warning;
+    background: $surface-light;
+}
+
+/* ── Updates Screen ────────────────────────────────────────── */
+#updates-screen {
+    width: 70%;
+    height: 70%;
+}
+
+/* ── Detail Overlay ────────────────────────────────────────── */
+#detail-overlay {
+    width: 60%;
+    height: auto;
+    max-height: 60%;
+    border: solid $accent;
+    background: $surface-light;
+}
+
+/* ── Progress Bar ──────────────────────────────────────────── */
+ProgressBar {
+    width: 100%;
+    height: 1;
+}
+
+ProgressBar > .bar--bar {
+    color: $accent;
+}
+
+ProgressBar > .bar--complete {
+    background: $border;
+}
+
+/* ── Buttons ──────────────────────────────────────────────── */
+Button {
+    margin: 1 0;
+}
+
+Button.primary {
+    background: $accent;
+    color: $surface;
+}
+
+Button.warning {
+    background: $warning;
+    color: $surface;
+}
+
+Button.error {
+    background: $error;
+    color: $surface;
+}

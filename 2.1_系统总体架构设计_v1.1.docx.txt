@@ -1,0 +1,59 @@
+================================================================================
+FILE: 2.1_系统总体架构设计_v1.1.docx  (38408 bytes)
+================================================================================
+ChinaTextbook v1.1第二批交付 2.1系统总体架构设计
+1. 文档目的
+本文档定义 ChinaTextbook v1.1 的总体软件架构，为开发人员提供统一的系统边界、模块职责、分层原则、部署方式和关键设计决策。本设计是后续模块设计（2.2）、数据模型（2.3）和状态机（2.4）的基础。
+2. 设计目标
+固定使用 GitHub 官方仓库，取消测速、多镜像和 Gitee 支持。
+采用 Textual 构建跨平台 TUI（Windows、Ubuntu）。
+选择粒度提升到具体教材（Book）。
+保留 v1.0 全部安全机制（fail-closed、SHA256、断点恢复、原子写入）。
+UI 与后台任务解耦，长时间任务不得阻塞界面。
+3. 分层架构
+表示层（UI）    ↓应用层（Application）    ↓核心服务层（Catalog / Git / Downloader / Merger / Verifier / Updater）    ↓基础设施层（State / Logging / Config / FileSystem）
+4. 模块职责
+模块
+职责
+禁止事项
+UI
+TreeView、搜索、详情、任务面板
+不得直接操作 Git 或文件
+Application
+协调业务流程、调度 Worker
+不得包含底层 IO
+Catalog
+构建 Book 索引
+不得执行下载
+Git Client
+Clone、Fetch、Sparse Checkout
+不得修改 UI
+Downloader
+下载教材文件
+不得直接更新状态文件
+Merger
+PDF 合并
+不得跳过校验
+Verifier
+SHA256 校验
+不得删除源分卷
+Updater
+软件/教材更新
+不得覆盖用户配置
+State
+状态持久化
+不得承担业务逻辑
+5. 数据流
+GitHub 仓库 → Git Tree → Book 索引 → 用户选择 → 文件级 Sparse Checkout → 下载 → PDF 合并 → SHA256 校验 → 输出目录 → 状态持久化
+6. 后台任务原则
+所有 Git、下载、合并、校验均运行在 Worker。
+UI 主线程只负责渲染与事件响应。
+取消操作必须安全停止，不允许破坏已写入数据。
+所有输出采用临时文件 + 原子替换。
+7. 非功能要求
+Windows 与 Ubuntu 保持一致体验。
+日志脱敏，不记录 Token。
+所有危险操作默认 fail-closed。
+模块低耦合，高内聚，便于单元测试。
+8. 后续文档关联
+2.2《模块设计说明》将细化各模块接口；2.3《数据模型设计》定义 Book、Task、State 等对象；2.4《状态机设计》定义生命周期与异常恢复。
