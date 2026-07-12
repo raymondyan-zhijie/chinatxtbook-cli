@@ -49,3 +49,32 @@
 [00:46:31] Files on disk: 0/6
 [00:46:31]   初中/语文/ exists: ['统编版-人民教育出版社']
 [00:46:31] STATUS: ERROR: No files downloaded
+[00:53:02] === PIPELINE START: 4 books ===
+[00:53:02]   [0] key=小学/数学/苏教版/义务教育教科书·数学一年级上册.pdf path=小学/数学/苏教版 name=义务教育教科书·数学一年级上册.pdf parts=1
+[00:53:02]   [1] key=小学/数学/苏教版/义务教育教科书·数学一年级下册.pdf path=小学/数学/苏教版 name=义务教育教科书·数学一年级下册.pdf parts=1
+[00:53:02]   [2] key=小学/数学/苏教版/义务教育教科书·数学三年级下册.pdf path=小学/数学/苏教版 name=义务教育教科书·数学三年级下册.pdf parts=1
+[00:53:02]   [3] key=小学/数学/苏教版/义务教育教科书·数学二年级下册.pdf path=小学/数学/苏教版 name=义务教育教科书·数学二年级下册.pdf parts=1
+[00:53:02] app.selected_keys count: 4
+[00:53:02] STATUS: Step 1: Checking repo...
+[00:53:02] Repo valid: True
+[00:53:02] Unique dirs: 1
+[00:53:02]   dir: 小学/数学/苏教版
+[00:53:02] STATUS: Fetching updates...
+[00:53:02] git fetch origin...
+[00:53:02] STATUS: Fetching repo data...
+[00:53:03] git fetch done
+[00:53:03] disabling sparse-checkout...
+[00:53:03] sparse-checkout disabled
+[00:53:03] STATUS: Restoring 1 dirs...
+[00:53:03] Restoring 4 files...
+[00:53:14] restore done
+[00:53:14] STATUS: Verifying files...
+[00:53:14] Files on disk: 4/4
+[00:53:14] STATUS: Found 4/4 books on disk
+[00:53:14] Output: D:\TextBook\ChinaTextbook_Output
+[00:53:14]   OK [1/4]: 义务教育教科书·数学一年级上册.pdf (20940589B)
+[00:53:14]   OK [2/4]: 义务教育教科书·数学一年级下册.pdf (20011685B)
+[00:53:14]   OK [3/4]: 义务教育教科书·数学三年级下册.pdf (19411379B)
+[00:53:14]   OK [4/4]: 义务教育教科书·数学二年级下册.pdf (18069138B)
+[00:53:14] STATUS: COMPLETE: 4 ok -> ChinaTextbook_Output
+[00:53:14] === PIPELINE DONE: 4 ok, 0 failed ===

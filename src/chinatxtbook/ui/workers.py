@@ -143,25 +143,15 @@ class PipelineWorker:
                 dest.parent.mkdir(parents=True, exist_ok=True)
 
                 for attempt in range(3):
-                    ok, out, err = git.run(
-                        ["show", f"HEAD:{git_path}"],
-                        allow_fetch=True, retry=1,
+                    # Use raw subprocess (not git.run) to avoid text encoding
+                    # which corrupts binary PDF data
+                    r = subprocess.run(
+                        ["git", "-C", str(WORK_DIR), "show", f"HEAD:{git_path}"],
+                        capture_output=True,
+                        env={**os.environ, "GIT_TERMINAL_PROMPT": "0"},
                     )
-                    if ok:
-                        # Write blob content to file
-                        try:
-                            dest.write_bytes(out.encode("utf-8") if isinstance(out, str) else out)
-                        except Exception:
-                            # Binary content - write raw bytes
-                            r2 = subprocess.run(
-                                ["git", "-C", str(WORK_DIR), "show", f"HEAD:{git_path}"],
-                                capture_output=True,
-                                env={**os.environ, "GIT_TERMINAL_PROMPT": "0"},
-                            )
-                            if r2.returncode == 0:
-                                dest.write_bytes(r2.stdout)
-                            else:
-                                _log(f"show failed for {git_path}: {r2.stderr[:100]}")
+                    if r.returncode == 0:
+                        dest.write_bytes(r.stdout)
                         break
                     _log(f"show {git_path[:50]} attempt {attempt+1}: {err[:80]}")
                     await asyncio.sleep(1)
