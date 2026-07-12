@@ -1,34 +1,14 @@
-"""Book List Widget -- center panel (ListView per design doc 2.2).
+"""Book List Widget -- center panel.
 
-Shows books in the highlighted directory. Split files grouped as one book.
-ListView natively supports Space/Enter selection.
+ListView with ListItem children per design doc 2.2.
+Space/Enter natively toggles selection.
 """
 
-from textual.widgets import ListView, ListItem, Static
-from textual.containers import Horizontal
-
-from chinatxtbook.utils.format import fmt_size
-
-
-class BookItem(ListItem):
-    """A single book row in the list."""
-
-    def __init__(self, book_key: str, name: str, parts: str, size: str,
-                 selected: bool = False, **kwargs):
-        super().__init__(**kwargs)
-        self.book_key = book_key
-        self._name = name
-        self._parts = parts
-        self._size = size
-        self._selected = selected
-
-    def compose(self):
-        check = "☑" if self._selected else "⬜"
-        yield Static(f"{check}  {self._name}  │  {self._parts}  │  {self._size}")
+from textual.widgets import ListView, ListItem, Label
 
 
 class BookListWidget(ListView):
-    """Center panel: books in the selected directory (ListView per 2.2).
+    """Center panel: books in the selected directory.
 
     Space/Enter: toggle selection (native ListView behavior).
     Arrow keys: move focus.
@@ -37,7 +17,9 @@ class BookListWidget(ListView):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._current_path: str = ""
-        self._all_groups: dict = {}  # key -> book_data dict
+        # Metadata stored separately: key -> {name, parts, size, ...}
+        self._book_meta: dict = {}       # list_index -> book_data
+        self._all_groups: dict = {}      # key -> book_data
 
     def on_mount(self) -> None:
         self.border_title = "教材列表"
@@ -45,6 +27,7 @@ class BookListWidget(ListView):
     def load_directory(self, git_client, dir_path: str, size_cache: dict = None):
         """Load books in a directory, grouping split parts."""
         self.clear()
+        self._book_meta.clear()
         self._all_groups.clear()
         self._current_path = dir_path
 
@@ -53,6 +36,7 @@ class BookListWidget(ListView):
 
         import os
         from chinatxtbook.core.manifest import SPLIT_RE
+        from chinatxtbook.utils.format import fmt_size
 
         all_files = git_client.ls_tree(dir_path, recursive=True)
         groups: dict = {}
@@ -70,6 +54,7 @@ class BookListWidget(ListView):
 
         app = self.app
         selected_keys = getattr(app, 'selected_keys', set()) if app else set()
+        idx = 0
 
         # Add split groups
         for base_name, parts in sorted(groups.items()):
@@ -80,10 +65,13 @@ class BookListWidget(ListView):
                 "part_count": len(parts), "parts": parts,
                 "size": sz, "status": "not_downloaded",
             }
-            sel = key in selected_keys
+            check = "☑" if key in selected_keys else "⬜"
             sz_str = fmt_size(sz) if sz else "?"
-            item = BookItem(key, base_name, f"{len(parts)}卷", sz_str, selected=sel)
+            label = f"{check}  {base_name}  │  {len(parts)}卷  │  {sz_str}"
+            item = ListItem(Label(label))
             self.append(item)
+            self._book_meta[idx] = self._all_groups[key]
+            idx += 1
 
         # Add single PDFs
         for name, fpath in sorted(singles.items()):
@@ -94,24 +82,32 @@ class BookListWidget(ListView):
                 "part_count": 1, "parts": {1: (name, fpath)},
                 "size": sz, "status": "not_downloaded",
             }
-            sel = key in selected_keys
+            check = "☑" if key in selected_keys else "⬜"
             sz_str = fmt_size(sz) if sz else "?"
-            item = BookItem(key, name, "1卷", sz_str, selected=sel)
+            label = f"{check}  {name}  │  1卷  │  {sz_str}"
+            item = ListItem(Label(label))
             self.append(item)
+            self._book_meta[idx] = self._all_groups[key]
+            idx += 1
 
         if not groups and not singles:
-            item = BookItem("", "展开到底层目录查看教材文件", "", "", selected=False)
+            item = ListItem(Label("展开到底层目录查看教材文件"))
             self.append(item)
 
     def on_list_view_selected(self, event: ListView.Selected) -> None:
-        """Space/Enter: toggle selection via native ListView event."""
-        if not event.item or not isinstance(event.item, BookItem):
+        """Space/Enter: toggle selection via native ListView."""
+        if event.item is None:
             return
-        item = event.item
-        key = item.book_key
-        if not key:
+        # Find the index of the selected item
+        try:
+            idx = self.children.index(event.item)
+        except ValueError:
             return
 
+        meta = self._book_meta.get(idx)
+        if not meta:
+            return
+        key = meta["key"]
         app = self.app
         if not app or not hasattr(app, 'selected_keys'):
             return
@@ -121,9 +117,8 @@ class BookListWidget(ListView):
             app.selected_keys.discard(key)
         else:
             app.selected_keys.add(key)
-            bk = self._all_groups.get(key, {})
-            if bk and hasattr(app, 'focused_book'):
-                app.focused_book = bk
+            if hasattr(app, 'focused_book'):
+                app.focused_book = meta
 
         # Recalculate size
         if hasattr(app, 'estimated_size'):
@@ -140,33 +135,34 @@ class BookListWidget(ListView):
         if hasattr(app, '_update_status_bar'):
             app._update_status_bar()
 
-        # Refresh this item's display
-        self._refresh_item(item, key)
+        # Refresh the item label with new checkmark
+        selected = key in app.selected_keys
+        check = "☑" if selected else "⬜"
+        name = meta["name"]
+        parts = f"{meta['part_count']}卷"
+        from chinatxtbook.utils.format import fmt_size
+        sz_str = fmt_size(meta["size"]) if meta["size"] else "?"
+        new_label = f"{check}  {name}  │  {parts}  │  {sz_str}"
 
-        # Stop event propagation
+        # Update the ListItem's Label child
+        try:
+            label_widget = event.item.query_one(Label)
+            label_widget.update(new_label)
+        except Exception:
+            pass
+
         event.stop()
 
     def on_list_view_highlighted(self, event: ListView.Highlighted) -> None:
-        """Update detail panel and focused_book when highlight changes."""
-        if not event.item or not isinstance(event.item, BookItem):
+        """Update detail panel when highlight changes."""
+        if event.item is None:
             return
-        key = event.item.book_key
-        if not key:
+        try:
+            idx = self.children.index(event.item)
+        except ValueError:
             return
-        bk = self._all_groups.get(key, {})
-        if bk:
+        meta = self._book_meta.get(idx)
+        if meta:
             app = self.app
             if app and hasattr(app, 'focused_book'):
-                app.focused_book = bk
-
-    def _refresh_item(self, item: BookItem, key: str) -> None:
-        """Update a BookItem's checkmark display."""
-        app = self.app
-        selected = key in app.selected_keys if app and hasattr(app, 'selected_keys') else False
-        item._selected = selected
-        try:
-            item.remove_children()
-            item.compose()
-            item.mount()
-        except Exception:
-            pass
+                app.focused_book = meta

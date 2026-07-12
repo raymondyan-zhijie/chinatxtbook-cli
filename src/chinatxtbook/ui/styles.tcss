@@ -72,7 +72,7 @@ Header {
 }
 
 /* ── ListView ─────────────────────────────────────────────── */
-#book-list ListView {
+#book-list {
     background: $surface;
 }
 
@@ -81,12 +81,8 @@ Header {
     color: $text;
 }
 
-#book-list ListView > ListItem.--highlight {
-    background: $border;
-}
-
-#book-list ListView > ListItem > Static {
-    background: transparent;
+#book-list ListView > ListItem > Label {
+    width: 100%;
 }
 
 /* ── Detail Panel ──────────────────────────────────────────── */
