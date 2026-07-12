@@ -4,8 +4,14 @@ ListView with ListItem children per design doc 2.2.
 Space/Enter natively toggles selection.
 """
 
+import os
+from pathlib import Path
+
 from textual.widgets import ListView, ListItem, Label
 from textual.binding import Binding
+
+from chinatxtbook.ui.messages import BookFocused
+from chinatxtbook.utils.format import fmt_size
 
 
 class BookListWidget(ListView):
@@ -62,10 +68,13 @@ class BookListWidget(ListView):
 
         # Add split groups
         for base_name, parts in sorted(groups.items()):
-            key = f"{dir_path}/{base_name}"
+            # Use actual file directory (from first part's full path), not navigation dir
+            first_path = list(parts.values())[0][1]  # full git path of first part
+            actual_dir = str(Path(first_path).parent.as_posix())
+            key = f"{actual_dir}/{base_name}"
             sz = sum(size_cache.get(fpath, 0) for _, fpath in parts.values()) if size_cache else 0
             self._all_groups[key] = {
-                "key": key, "name": base_name, "path": dir_path.rstrip("/"),
+                "key": key, "name": base_name, "path": actual_dir,
                 "part_count": len(parts), "parts": parts,
                 "size": sz, "status": "not_downloaded",
             }
@@ -79,10 +88,12 @@ class BookListWidget(ListView):
 
         # Add single PDFs
         for name, fpath in sorted(singles.items()):
-            key = f"{dir_path}/{name}"
+            # Use actual file directory from full git path
+            actual_dir = str(Path(fpath).parent.as_posix())
+            key = f"{actual_dir}/{name}"
             sz = size_cache.get(fpath, 0) if size_cache else 0
             self._all_groups[key] = {
-                "key": key, "name": name, "path": dir_path.rstrip("/"),
+                "key": key, "name": name, "path": actual_dir,
                 "part_count": 1, "parts": {1: (name, fpath)},
                 "size": sz, "status": "not_downloaded",
             }
