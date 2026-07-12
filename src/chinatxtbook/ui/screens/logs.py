@@ -10,25 +10,18 @@ from textual.widgets import Static, RichLog, Button, Select
 
 
 class LogsScreen(ModalScreen):
-    """SCR-LOGS: Real-time log viewer.
+    """SCR-LOGS: Real-time log viewer."""
 
-    Shows rotating log buffer with level filtering.
-    Supports auto-scroll toggle, copy, and diagnostic export.
-    """
+    BINDINGS = [("escape", "dismiss", "关闭")]
 
-    BINDINGS = [
-        ("escape", "dismiss", "关闭"),
-    ]
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self._log_entries: list = []
 
     def compose(self) -> ComposeResult:
         with Vertical(id="log-screen"):
-            yield Static("📋 运行日志", classes="modal-title")
+            yield Static("运行日志", classes="modal-title")
             with Horizontal():
-                yield Select(
-                    [(lv, lv) for lv in ["ALL", "INFO", "WARN", "ERROR", "DEBUG"]],
-                    value="ALL",
-                    id="log-filter",
-                )
                 yield Button("复制", variant="default", id="log-copy")
                 yield Button("导出诊断", variant="default", id="log-export")
                 yield Button("关闭 (Esc)", variant="default", id="log-close")
@@ -38,13 +31,9 @@ class LogsScreen(ModalScreen):
         log_view = self.query_one("#log-view", RichLog)
         log_view.write("[cyan]ChinaTextbook 运行日志[/cyan]")
         log_view.write("─" * 40)
-
-        # Load recent log entries from app's log buffer
-        app = self.app
-        log_buffer = getattr(app, '_log_buffer', [])
-        for level, msg in log_buffer[-200:]:
+        for level, msg in self._log_entries:
             color = {"INFO": "", "WARN": "yellow", "ERROR": "red",
-                     "OK": "green", "STEP": "cyan"}.get(level, "")
+                     "OK": "green", "STEP": "cyan", "DATA": ""}.get(level, "")
             if color:
                 log_view.write(f"[{color}][{level}] {msg}[/{color}]")
             else:

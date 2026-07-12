@@ -12,15 +12,14 @@ from chinatxtbook import VERSION
 
 
 class UpdatesScreen(ModalScreen):
-    """SCR-UPDATES: Check for software and textbook repository updates.
+    """SCR-UPDATES: Check for software and textbook repository updates."""
 
-    Software: check GitHub Releases for newer versions.
-    Textbook: git fetch + diff to detect upstream changes.
-    """
+    BINDINGS = [("escape", "dismiss", "关闭")]
 
-    BINDINGS = [
-        ("escape", "dismiss", "关闭"),
-    ]
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self._has_updates = False
+        self._update_info = ""
 
     def compose(self) -> ComposeResult:
         with Vertical(id="updates-screen"):
@@ -39,10 +38,13 @@ class UpdatesScreen(ModalScreen):
 
     def on_mount(self) -> None:
         soft = self.query_one("#update-software", Static)
-        soft.update(f"当前版本: v{VERSION}\n按「检查软件更新」查询 GitHub Releases")
+        soft.update(f"当前版本: v{VERSION}")
 
         text = self.query_one("#update-textbook", Static)
-        text.update("按「检查教材更新」对比上游仓库变更")
+        if self._update_info:
+            text.update(self._update_info)
+        else:
+            text.update("按「检查教材更新」对比上游仓库变更")
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "update-close":

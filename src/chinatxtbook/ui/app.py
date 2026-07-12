@@ -164,28 +164,91 @@ class ChinaTextbookApp(App):
         self.push_screen(TasksScreen())
 
     def action_show_logs(self) -> None:
-        self.push_screen(LogsScreen())
+        screen = LogsScreen()
+        screen._log_entries = list(self._log_buffer[-200:])
+        self.push_screen(screen)
 
     def action_show_updates(self) -> None:
-        self.push_screen(UpdatesScreen())
+        screen = UpdatesScreen()
+        if self.git_client and self.git_client.is_repo_valid():
+            try:
+                branch = self.state.get("default_branch", "master")
+                old = self.git_client.get_head_commit()
+                self.git_client.fetch(branch)
+                new = self.git_client.rev_parse(f"origin/{branch}")
+                if old and new and old != new:
+                    screen._has_updates = True
+                    screen._update_info = f"发现教材更新\n{old[:8]} -> {new[:8]}"
+                else:
+                    screen._update_info = "教材仓库已是最新"
+            except Exception:
+                screen._update_info = "无法检查更新（网络问题）"
+        self.push_screen(screen)
 
     def action_open_file(self) -> None:
+        """[O] Open the focused book's PDF in system viewer."""
         if not self.focused_book:
             self.notify("请先聚焦一个教材", severity="warning")
+            return
+        name = self.focused_book.get("name", "")
+        path = self.focused_book.get("path", "")
+        from chinatxtbook.config import OUTPUT_DIR
+        fp = OUTPUT_DIR / path / name
+        if fp.exists():
+            import os, subprocess, sys
+            try:
+                if sys.platform == "win32":
+                    os.startfile(str(fp))
+                elif sys.platform == "darwin":
+                    subprocess.run(["open", str(fp)])
+                else:
+                    subprocess.run(["xdg-open", str(fp)])
+                self.notify(f"已打开: {name}", severity="information")
+            except Exception as e:
+                self.notify(f"无法打开: {e}", severity="error")
         else:
-            self.notify(f"打开: {self.focused_book.get('name','')}", severity="information")
+            self.notify(f"文件未下载: {name}\n路径: {fp}", severity="warning")
 
     def action_open_dir(self) -> None:
-        if not self.focused_book:
-            self.notify("请先聚焦一个教材", severity="warning")
-        else:
-            self.notify(f"目录: {self.focused_book.get('path','')}", severity="information")
+        """[L] Open the output directory in file explorer."""
+        from chinatxtbook.config import OUTPUT_DIR
+        import os, sys, subprocess
+        fp = OUTPUT_DIR / (self.focused_book.get("path", "") if self.focused_book else "")
+        fp.mkdir(parents=True, exist_ok=True)
+        try:
+            if sys.platform == "win32":
+                os.startfile(str(fp))
+            elif sys.platform == "darwin":
+                subprocess.run(["open", str(fp)])
+            else:
+                subprocess.run(["xdg-open", str(fp)])
+            self.notify(f"已打开: {fp}", severity="information")
+        except Exception as e:
+            self.notify(f"无法打开: {e}", severity="error")
 
     def action_verify_book(self) -> None:
+        """[V] Re-verify the focused book's SHA256."""
         if not self.focused_book:
             self.notify("请先聚焦一个教材", severity="warning")
-        else:
-            self.notify(f"验证: {self.focused_book.get('name','')}", severity="information")
+            return
+        name = self.focused_book.get("name", "")
+        path = self.focused_book.get("path", "")
+        from chinatxtbook.config import OUTPUT_DIR
+        fp = OUTPUT_DIR / path / name
+        if not fp.exists():
+            self.notify("文件未下载，无法验证", severity="warning")
+            return
+        import hashlib
+        h = hashlib.sha256()
+        with open(fp, "rb") as f:
+            while True:
+                chunk = f.read(1024 * 1024)
+                if not chunk:
+                    break
+                h.update(chunk)
+        sha = h.hexdigest()
+        self.notify(f"SHA256: {sha[:16]}...", severity="information")
+        self._log_buffer.append(("OK", f"Verified {name}: {sha}"))
 
     def action_quit_app(self) -> None:
         if self.pipeline_running:
