@@ -3,6 +3,7 @@
 import asyncio
 import os
 import shutil
+import subprocess
 from datetime import datetime
 from pathlib import Path
 
@@ -130,31 +131,49 @@ class PipelineWorker:
             all_paths = list(set(all_paths))
             _log(f"Restoring {len(all_paths)} files...")
 
-            # Restore in batches with retry and network resilience
+            # Use git show to extract files (works around checkout/restore
+            # pathspec bug in blobless clones)
             failed_paths = []
-            for i in range(0, len(all_paths), 50):
-                batch = all_paths[i:i + 50]
-                for attempt in range(5):  # More retries for network
-                    # Always clean stale locks before git ops
-                    lock = WORK_DIR / ".git" / "index.lock"
-                    lock.unlink(missing_ok=True)
+            for i, git_path in enumerate(all_paths):
+                # Clean stale locks
+                lock = WORK_DIR / ".git" / "index.lock"
+                lock.unlink(missing_ok=True)
 
-                    ok, _, err = git.run(
-                        ["restore", "--source=HEAD", "--worktree", "--"] + batch,
-                        allow_fetch=True, retry=3,  # 3 git-level retries
+                dest = WORK_DIR / git_path
+                dest.parent.mkdir(parents=True, exist_ok=True)
+
+                for attempt in range(3):
+                    ok, out, err = git.run(
+                        ["show", f"HEAD:{git_path}"],
+                        allow_fetch=True, retry=1,
                     )
                     if ok:
+                        # Write blob content to file
+                        try:
+                            dest.write_bytes(out.encode("utf-8") if isinstance(out, str) else out)
+                        except Exception:
+                            # Binary content - write raw bytes
+                            r2 = subprocess.run(
+                                ["git", "-C", str(WORK_DIR), "show", f"HEAD:{git_path}"],
+                                capture_output=True,
+                                env={**os.environ, "GIT_TERMINAL_PROMPT": "0"},
+                            )
+                            if r2.returncode == 0:
+                                dest.write_bytes(r2.stdout)
+                            else:
+                                _log(f"show failed for {git_path}: {r2.stderr[:100]}")
                         break
-                    _log(f"restore batch {i//50+1} attempt {attempt+1}: {err[:120]}")
-                    await asyncio.sleep(2 * (attempt + 1))  # Exponential backoff
+                    _log(f"show {git_path[:50]} attempt {attempt+1}: {err[:80]}")
+                    await asyncio.sleep(1)
                 else:
-                    failed_paths.extend(batch)
+                    failed_paths.append(git_path)
 
-                pct = 20 + int(30 * (i + len(batch)) / max(len(all_paths), 1))
-                self._ui_progress(min(pct, 50), "Downloading")
+                pct = 20 + int(30 * (i + 1) / max(len(all_paths), 1))
+                if i % 10 == 0:
+                    self._ui_progress(min(pct, 50), "Downloading")
 
             if failed_paths:
-                _log(f"Failed to restore {len(failed_paths)} files")
+                _log(f"Failed to download {len(failed_paths)} files")
 
             _log("restore done")
         except asyncio.TimeoutError:

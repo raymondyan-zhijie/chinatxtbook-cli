@@ -3,39 +3,33 @@ from pathlib import Path
 
 WORK_DIR = Path("ChinaTextbook_Workspace")
 
-def git(cmd, **kw):
-    r = subprocess.run(["git", "-C", str(WORK_DIR)] + cmd,
-        capture_output=True, text=True, encoding="utf-8",
-        env={**os.environ, "GIT_TERMINAL_PROMPT": "0"}, **kw)
-    return r
+r = subprocess.run(
+    ["git", "-C", str(WORK_DIR), "ls-tree", "-r", "--name-only", "HEAD", "--", "小学/数学/人教版/"],
+    capture_output=True, text=True, encoding="utf-8",
+    env={**os.environ, "GIT_TERMINAL_PROMPT": "0"},
+)
+path = r.stdout.strip().split("\n")[0]
 
-# Check git status
-r = git(["status", "--short"])
-print(f"Status: {r.stdout[:500]}")
+# Test different commands to materialize the file
+env = {**os.environ, "GIT_TERMINAL_PROMPT": "0"}
 
-# Check HEAD commit
-r = git(["rev-parse", "HEAD"])
-print(f"HEAD: {r.stdout.strip()}")
+tests = [
+    ["restore", "--source=HEAD", "--worktree", path],
+    ["checkout", "HEAD", "--", path],
+    ["checkout", path],
+    ["show", f"HEAD:{path}"],
+]
+for cmd in tests:
+    r = subprocess.run(
+        ["git", "-C", str(WORK_DIR)] + cmd,
+        capture_output=True, encoding="utf-8", errors="replace",
+        env=env,
+    )
+    ok = "OK" if r.returncode == 0 else "FAIL"
+    print(f"{ok} git {' '.join(cmd[:3])}: {r.stderr[:100]}")
 
-# Check branch
-r = git(["branch"])
-print(f"Branch: {r.stdout.strip()}")
-
-# Try resetting index
-r = git(["read-tree", "--empty"])
-print(f"read-tree empty: {r.returncode} {r.stderr[:100]}")
-
-# Try restoring a simple path
-r = git(["ls-tree", "-r", "--name-only", "HEAD", "--", "小学/数学/人教版/"])
-paths = r.stdout.strip().split("\n")
-p = paths[0]
-
-# Try with GIT_TRACE
-env = {**os.environ, "GIT_TERMINAL_PROMPT": "0", "GIT_TRACE": "1"}
-r = git(["checkout", "HEAD", "--", p], env=env)
-print(f"\nCheckout with trace: {r.returncode}")
-print(f"stderr: {r.stderr[:500]}")
-
-# Also check what's in the index
-r = git(["ls-files", "--", p])
-print(f"\nls-files for path: '{r.stdout.strip()}'")
+# Check if file now exists
+fp = WORK_DIR / path
+print(f"\nFile on disk: {fp.exists()}")
+if fp.exists():
+    print(f"  Size: {fp.stat().st_size}")
