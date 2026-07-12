@@ -42,6 +42,28 @@ class BrowseScreen(Screen):
             return
 
         bar.update_status("Loading catalog...")
+
+        # Populate size cache from GitHub API (async in background)
+        import asyncio
+        git = app.git_client
+        if not app.state.get("size_cache"):
+            bar.update_status("Fetching file sizes from GitHub API...")
+            try:
+                commit = git.get_head_commit()
+                dirs, files, truncated = git.get_remote_sizes(
+                    commit or app.state.get("default_branch", "master")
+                )
+                if dirs:
+                    app.state["size_cache"] = {
+                        "commit": commit,
+                        "dirs": dirs,
+                        "files": files,
+                        "truncated": truncated,
+                    }
+                    app.state_mgr.save(app.state)
+            except Exception:
+                pass  # Size cache is optional
+
         tree = self.query_one("#catalog-tree", CatalogTreeWidget)
         tree.set_git_client(app.git_client)
         tree.load_top_dirs(list(DEFAULT_TOP_DIRS))

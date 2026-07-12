@@ -64,6 +64,10 @@ class BookListWidget(ListView):
 
         app = self.app
         selected_keys = getattr(app, 'selected_keys', set()) if app else set()
+        # Derive book status from output dir and state groups (per FR-014, UI Gap 9)
+        state_groups = (app.state or {}).get("groups", {}) if app else {}
+        from chinatxtbook.config import OUTPUT_DIR
+        output_dir = OUTPUT_DIR
         idx = 0
 
         # Add split groups
@@ -73,10 +77,12 @@ class BookListWidget(ListView):
             actual_dir = str(Path(first_path).parent.as_posix())
             key = f"{actual_dir}/{base_name}"
             sz = sum(size_cache.get(fpath, 0) for _, fpath in parts.values()) if size_cache else 0
+            # Derive actual status
+            status, _ = self._derive_status(key, base_name, actual_dir, state_groups, output_dir)
             self._all_groups[key] = {
                 "key": key, "name": base_name, "path": actual_dir,
                 "part_count": len(parts), "parts": parts,
-                "size": sz, "status": "not_downloaded",
+                "size": sz, "status": status,
             }
             check = "☑" if key in selected_keys else "⬜"
             sz_str = fmt_size(sz) if sz else "?"
@@ -92,10 +98,11 @@ class BookListWidget(ListView):
             actual_dir = str(Path(fpath).parent.as_posix())
             key = f"{actual_dir}/{name}"
             sz = size_cache.get(fpath, 0) if size_cache else 0
+            status, _ = self._derive_status(key, name, actual_dir, state_groups, output_dir)
             self._all_groups[key] = {
                 "key": key, "name": name, "path": actual_dir,
                 "part_count": 1, "parts": {1: (name, fpath)},
-                "size": sz, "status": "not_downloaded",
+                "size": sz, "status": status,
             }
             check = "☑" if key in selected_keys else "⬜"
             sz_str = fmt_size(sz) if sz else "?"
@@ -176,6 +183,22 @@ class BookListWidget(ListView):
             label_widget.update(new_label)
         except Exception:
             pass
+
+    @staticmethod
+    def _derive_status(key, name, actual_dir, state_groups, output_dir):
+        """Derive book status from output file existence and state groups."""
+        out_file = output_dir / actual_dir / name
+        rec = state_groups.get(key)
+        if rec:
+            if rec.get("stale"):
+                return "stale", "待重新核对"
+            if rec.get("status") == "ok" and rec.get("sha256"):
+                if out_file.exists():
+                    return "verified", "已验证"
+                return "not_downloaded", "已记录(缺文件)"
+        if out_file.exists():
+            return "downloaded", "已下载"
+        return "not_downloaded", "未下载"
 
     def on_list_view_highlighted(self, event: ListView.Highlighted) -> None:
         """Update detail panel when highlight changes."""

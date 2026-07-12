@@ -48,9 +48,33 @@ class LogsScreen(ModalScreen):
         if event.button.id == "log-close":
             self.dismiss()
         elif event.button.id == "log-copy":
-            self.notify("日志已复制（模拟）", severity="information")
+            log_view = self.query_one("#log-view")
+            text = log_view.text
+            try:
+                import subprocess, sys
+                if sys.platform == "win32":
+                    subprocess.run(["clip"], input=text, text=True, shell=True)
+                else:
+                    subprocess.run(["xclip", "-sel", "clip"], input=text, text=True)
+                self.notify("日志已复制到剪贴板", severity="information")
+            except Exception:
+                self.notify(f"复制失败（日志共 {len(text)} 字符）", severity="warning")
         elif event.button.id == "log-export":
-            self.notify("诊断报告已导出（模拟）", severity="information")
+            from datetime import datetime
+            import sys, platform, shutil
+            fn = f"diagnostic_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+            lines = [
+                f"ChinaTextbook Diagnostic Report",
+                f"Generated: {datetime.now().isoformat()}",
+                f"Python: {sys.version}",
+                f"Platform: {platform.system()} {platform.release()}",
+                f"Terminal: {shutil.get_terminal_size().columns}x{shutil.get_terminal_size().lines}",
+                f"",
+                self.query_one("#log-view").text,
+            ]
+            with open(fn, "w", encoding="utf-8") as f:
+                f.write("\n".join(lines))
+            self.notify(f"诊断报告已保存: {fn}", severity="information")
 
     def action_dismiss(self) -> None:
         self.dismiss()
