@@ -228,12 +228,21 @@ class ChinaTextbookApp(App):
 
         confirmed = await self.push_screen_wait(ConfirmOverlay())
         if confirmed:
+            # Build list of selected books with full metadata
+            selected = [
+                b for b in self._catalog_books
+                if b["key"] in self.selected_keys
+            ]
             self.notify(
-                f"开始下载 {len(self.selected_keys)} 册教材...",
+                f"开始下载 {len(selected)} 册教材...",
                 severity="information",
             )
             self.pipeline_running = True
-            # TODO Phase 4: Wire to PipelineWorker
+
+            # Launch pipeline in background worker
+            from chinatxtbook.ui.workers import PipelineWorker
+            worker = PipelineWorker(self)
+            self.run_worker(worker.run(selected), exclusive=True)
 
     def action_show_tasks(self) -> None:
         """[F6] Show task manager."""
