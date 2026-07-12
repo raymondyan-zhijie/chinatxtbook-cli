@@ -23,8 +23,11 @@ china_textbook_v1.0.py
 
 # Runtime artifacts
 ChinaTextbook_Workspace/
+ChinaTextbook_Output/
 china_textbook_state.json
 china_textbook.log
 china_textbook.lock
 china_textbook_report.md
+pipeline.log
+_check_paths.py
 *.pdf.tmp
