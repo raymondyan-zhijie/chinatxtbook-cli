@@ -1,7 +1,7 @@
 """SCR-BROWSE — Main browsing interface.
 
-Three-panel layout: Catalog Tree | Book List | Detail Panel.
-Self-contained catalog loading via set_timer for correct mount timing.
+Left: GitHub repo directory tree. Center: files in selected directory.
+Right: file details. Bottom: selection status.
 """
 
 from textual.app import ComposeResult
@@ -17,7 +17,7 @@ from chinatxtbook.ui.widgets.status_bar import StatusBarWidget
 
 
 class BrowseScreen(Screen):
-    """SCR-BROWSE: Main textbook browsing and selection screen."""
+    """SCR-BROWSE: directory tree | file list | details."""
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
@@ -28,12 +28,11 @@ class BrowseScreen(Screen):
         yield StatusBarWidget(id="status-bar")
 
     def on_mount(self) -> None:
-        """Load catalog after screen is fully mounted."""
-        # Defer loading to ensure widgets are in the DOM
-        self.set_timer(0.1, self._load_catalog)
+        """Load top-level directories after screen is mounted."""
+        self.set_timer(0.2, self._init_catalog)
 
-    def _load_catalog(self) -> None:
-        """Load the catalog tree from the Git workspace."""
+    def _init_catalog(self) -> None:
+        """Initialize the catalog tree from the Git workspace."""
         app = self.app
         if not hasattr(app, 'git_client') or not app.git_client:
             return
@@ -43,24 +42,8 @@ class BrowseScreen(Screen):
         tree = self.query_one("#catalog-tree", CatalogTreeWidget)
         tree.set_git_client(app.git_client)
 
-        # Use cached books from app, or load fresh
         tops = DEFAULT_TOP_DIRS
         if hasattr(app, 'state') and app.state:
-            tops = app.state.get("selected_paths") or tops
+            tops = app.state.get("selected_paths", DEFAULT_TOP_DIRS) or tops
 
-        tree.load_catalog(tops)
-
-        # Populate app's _catalog_books from tree data
-        if hasattr(app, '_catalog_books'):
-            books = []
-            for node in tree.root.children:  # stage nodes
-                for subj_node in node.children:  # subject nodes
-                    for book_node in subj_node.children:  # book nodes
-                        if book_node.data and book_node.data.get("type") == "book":
-                            books.append(book_node.data)
-            app._catalog_books = books
-
-        # Update status bar
-        bar = self.query_one("#status-bar", StatusBarWidget)
-        count = len(getattr(app, 'selected_keys', set()))
-        bar.update_info(count, getattr(app, 'estimated_size', 0))
+        tree.load_top_dirs(list(tops))

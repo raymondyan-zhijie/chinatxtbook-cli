@@ -101,6 +101,19 @@ class ChinaTextbookApp(App):
         except Exception:
             pass
 
+    def show_directory_files(self, dir_path: str) -> None:
+        """Load files in a directory into the center book list."""
+        if not self.git_client:
+            return
+        try:
+            screen = self.screen
+            book_list = screen.query_one("#book-list")
+            size_cache = (self.state.get("size_cache") or {}).get("files", {})
+            book_list.load_directory(self.git_client, dir_path, size_cache)
+            self._catalog_books = list(book_list._all_groups.values())
+        except Exception:
+            pass
+
     # ── Global actions ───────────────────────────────────────
 
     def action_search(self) -> None:

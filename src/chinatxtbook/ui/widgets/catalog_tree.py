@@ -1,145 +1,138 @@
 """Catalog Tree Widget — left panel.
 
-4-level TreeView: 学段 → 科目 → 年级/册次 → 教材.
-Keyboard: Space to select, arrows to navigate, Enter for detail.
+Pure directory tree mirroring the GitHub repository structure exactly.
+Lazy-loaded: children fetched from git on node expand.
 """
+
+import os
+from pathlib import Path
 
 from textual.widgets import Tree
 
 from chinatxtbook.core.git_client import GitClient
-from chinatxtbook.core.manifest import SPLIT_RE
-from chinatxtbook.utils.format import fmt_size
 
 
 class CatalogTreeWidget(Tree):
-    """SCR-BROWSE left panel: hierarchical textbook catalog.
+    """Left panel: exact mirror of GitHub repo directory tree.
 
-    Space: select/deselect book. Enter: show detail overlay.
-    Arrows: navigate. Left/Right: collapse/expand.
+    Shows directories only (no files). Lazy-loads children on expand.
+    Highlighting a directory updates the center book list.
     """
 
-    BINDINGS = [
-        # Space handled via action_toggle_selection
-    ]
-
     def __init__(self, *args, **kwargs):
-        super().__init__("📚 教材目录", *args, **kwargs)
+        super().__init__("📁 仓库目录", *args, **kwargs)
         self._git_client: GitClient | None = None
-        self._size_cache: dict = {}
-        self._selected_node_ids: set = set()
 
-    def set_git_client(self, client: GitClient, size_cache: dict = None):
+    def set_git_client(self, client: GitClient):
         self._git_client = client
-        if size_cache:
-            self._size_cache = size_cache
 
-    def load_catalog(self, top_dirs: list[str] = None):
-        """Populate tree from git repository data."""
+    def load_top_dirs(self, top_dirs: list[str]):
+        """Load top-level directory nodes (学段 level)."""
         self.root.remove_children()
-        self._selected_node_ids.clear()
-
         if not self._git_client or not self._git_client.is_repo_valid():
-            self.root.add("📦 仓库未初始化 — 按 F5", expand=False)
+            self.root.add("📦 仓库未初始化", expand=False)
             return
 
-        tops = top_dirs or ["小学", "初中", "高中"]
-        import os
-        from pathlib import Path
-
-        for top in tops:
+        for top in top_dirs:
             if not self._git_client.path_exists_in_tree(top):
                 continue
-
-            all_files = self._git_client.ls_tree(top, recursive=True)
-            if not all_files:
+            # Get subdirectories of this top dir
+            children = self._git_client.ls_tree(f"{top}/")
+            if not children:
                 continue
-
-            # Group split files by directory
-            groups_by_dir: dict = {}
-            for f in all_files:
-                name = os.path.basename(f)
-                m = SPLIT_RE.match(name)
-                if not m:
-                    continue
-                base = m.group(1)
-                idx = int(m.group(2))
-                rel_dir = str(Path(f).parent.as_posix())
-                groups_by_dir.setdefault(rel_dir, {}).setdefault(base, {})[idx] = name
-
-            if not groups_by_dir:
-                continue
-
-            stage_node = self.root.add(f"📁 {top}", expand=True)
-            stage_node.data = {"type": "stage", "path": top}
-
-            for dir_path in sorted(groups_by_dir):
-                groups = groups_by_dir[dir_path]
-                parts_path = dir_path.split("/")
-                subject_name = parts_path[1] if len(parts_path) > 1 else dir_path
-
-                subject_node = stage_node.add(
-                    f"📂 {subject_name} ({len(groups)})", expand=True)
-                subject_node.data = {"type": "subject", "path": dir_path}
-
-                for base_name, parts in sorted(groups.items()):
-                    key = f"{dir_path}/{base_name}"
-                    total_size = sum(
-                        self._size_cache.get(f"{dir_path}/{p}", 0)
-                        for p in parts.values()
-                    )
-                    size_str = f" ({fmt_size(total_size)})" if total_size else ""
-                    label = f"📄 {base_name} [{len(parts)}卷]{size_str}"
-
-                    # Show selection state
-                    app = self.app
-                    if hasattr(app, 'selected_keys') and key in app.selected_keys:
-                        label = f"☑ {base_name} [{len(parts)}卷]{size_str}"
-
-                    book_node = subject_node.add(label, expand=False)
-                    book_node.data = {
-                        "type": "book", "path": dir_path, "base": base_name,
-                        "key": key, "parts": parts,
-                        "size": total_size, "part_count": len(parts),
-                    }
+            # Add root node with placeholder child (for expand arrow)
+            node = self.root.add(f"📁 {top}", expand=False)
+            node.data = {"type": "dir", "path": top, "loaded": False}
+            # Add a dummy child so the expand arrow appears
+            node.add(" ... ", expand=False)
 
         self.root.expand()
 
-    def on_key(self, event) -> None:
-        """Handle Space for selection toggle."""
-        if event.key == "space":
-            cursor = self.cursor_line
-            if cursor >= 0:
-                try:
-                    node = self.get_node_at_line(cursor)
-                    if node and node.data and node.data.get("type") == "book":
-                        self._toggle_selection(node)
-                        event.prevent_default()
-                        event.stop()
-                except Exception:
-                    pass
-
-    def on_tree_node_selected(self, event: Tree.NodeSelected) -> None:
-        """Enter/click: toggle selection for books."""
-        if not event.node or not event.node.data:
+    def _load_children(self, node) -> None:
+        """Lazy-load children of a directory node from git tree."""
+        if not self._git_client:
             return
-        data = event.node.data
-        if data.get("type") != "book":
+        path = node.data.get("path", "")
+        if not path:
             return
-        self._toggle_selection(event.node)
-        event.stop()
 
-    def _toggle_selection(self, node) -> None:
-        """Toggle a book node's selection state."""
-        key = node.data.get("key", "")
-        app = self.app
-        if hasattr(app, 'toggle_book_selection'):
-            app.toggle_book_selection(key, node.data)
+        # Get git tree entries for this path
+        entries = self._git_client.ls_tree(f"{path}/")
+        if not entries:
+            return
+
+        # Separate directories from files
+        from chinatxtbook.core.manifest import SPLIT_RE
+
+        # Get unique parent directories for entries
+        subdirs = set()
+        for entry in entries:
+            # entry might be like "小学/语文/统编版" (a dir)
+            # or "小学/语文/统编版/file.pdf" (a file)
+            if "/" in entry[len(path)+1:] if entry.startswith(path + "/") else False:
+                # Has more path components - find the next directory level
+                rel = entry[len(path)+1:] if entry.startswith(path + "/") else entry
+                parts = rel.split("/")
+                if len(parts) >= 1:
+                    subdirs.add(parts[0])  # Next level directory name
+            else:
+                # Direct child
+                pass
+
+        # Alternate approach: use git ls-tree to get direct tree entries
+        # This gives us both trees (dirs) and blobs (files)
+        ok, out, _ = self._git_client.run(
+            ["ls-tree", "HEAD", "--", path.rstrip("/")], retry=1
+        )
+        if not ok:
+            return
+
+        import re
+        for line in out.strip().split("\n"):
+            line = line.strip()
+            if not line:
+                continue
+            # git ls-tree format: <mode> <type> <hash>\t<name>
+            parts = re.split(r'\s+', line, maxsplit=3)
+            if len(parts) < 4:
+                continue
+            mode, obj_type, obj_hash, name = parts[0], parts[1], parts[2], parts[3]
+            name = name.strip()
+
+            if obj_type == "tree":
+                child_path = f"{path}/{name}"
+                child_node = node.add(f"📁 {name}", expand=False)
+                child_node.data = {"type": "dir", "path": child_path, "loaded": False}
+                child_node.add(" ... ", expand=False)
+            # Blobs (files) are NOT shown in the tree — they appear in the center panel
+
+    def on_tree_node_expanded(self, event: Tree.NodeExpanded) -> None:
+        """Lazy-load children when a directory node is expanded."""
+        node = event.node
+        if not node or not node.data:
+            return
+        if node.data.get("type") != "dir":
+            return
+        if node.data.get("loaded"):
+            return
+
+        # Remove dummy placeholder
+        node.remove_children()
+        self._load_children(node)
+        node.data["loaded"] = True
 
     def on_tree_node_highlighted(self, event: Tree.NodeHighlighted) -> None:
-        """Update app's focused_book on arrow navigation."""
-        if event.node and event.node.data:
-            data = event.node.data
-            if data.get("type") == "book":
-                app = self.app
-                if hasattr(app, 'focused_book'):
-                    app.focused_book = data
+        """Update center panel when a directory is focused."""
+        node = event.node
+        if not node or not node.data:
+            return
+        if node.data.get("type") != "dir":
+            return
+        path = node.data.get("path", "")
+        if not path:
+            return
+
+        # Tell the center panel to show files for this path
+        app = self.app
+        if hasattr(app, 'show_directory_files'):
+            app.show_directory_files(path)
