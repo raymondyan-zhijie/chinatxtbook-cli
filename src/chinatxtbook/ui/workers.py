@@ -31,18 +31,18 @@ class PipelineWorker:
 
         def _status(text):
             try:
-                bar = app.screen.query_one("#status-bar")
+                bar = app.query_one("#status-bar")
                 bar.update_status(text)
-            except Exception:
-                pass
+            except Exception as e:
+                app._log_buffer.append(("ERROR", f"Status update failed: {e}"))
 
         def _progress(pct, stage, current="", done=0):
             try:
-                bar = app.screen.query_one("#status-bar")
+                bar = app.query_one("#status-bar")
                 bar.update_progress(pct=pct, stage=stage, current=current,
                                     done=done, total=total)
-            except Exception:
-                pass
+            except Exception as e:
+                app._log_buffer.append(("ERROR", f"Progress update failed: {e}"))
 
         _status(f"⏳ 准备处理 {total} 册教材...")
 
