@@ -21,3 +21,11 @@
 [22:40:19]   初中/体育与健康/人教版-人民教育出版社/七年级/ does NOT exist on disk
 [22:40:19] STATUS: ERROR: No files downloaded - check network
 [22:40:19]   (status bar update failed: No nodes match '#status-bar' on Screen(id='_default'))
+[22:50:55] === PIPELINE START: 6 books ===
+[22:50:55]   [0] key=小学/数学/人教版/义务教育教科书 · 数学一年级上册.pdf path=小学/数学/人教版 name=义务教育教科书 · 数学一年级上册.pdf parts=1
+[22:50:55]   [1] key=小学/数学/人教版/义务教育教科书 · 数学三年级上册.pdf path=小学/数学/人教版 name=义务教育教科书 · 数学三年级上册.pdf parts=1
+[22:50:55]   [2] key=小学/数学/人教版/义务教育教科书 · 数学六年级上册.pdf path=小学/数学/人教版 name=义务教育教科书 · 数学六年级上册.pdf parts=1
+[22:50:55]   [3] key=小学/数学/人教版/义务教育教科书 · 数学四年级上册.pdf path=小学/数学/人教版 name=义务教育教科书 · 数学四年级上册.pdf parts=1
+[22:50:55]   [4] key=小学/数学/人教版/义务教育教科书·数学二年级下册.pdf path=小学/数学/人教版 name=义务教育教科书·数学二年级下册.pdf parts=1
+[22:50:55] app.selected_keys count: 6
+[22:50:55] STATUS: Step 1: Checking repo...

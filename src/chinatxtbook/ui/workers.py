@@ -28,25 +28,25 @@ class PipelineWorker:
     def __init__(self, app):
         self.app = app
 
+    def _find_status_bar(self):
+        """Find the status bar widget across all screens."""
+        for screen in reversed(self.app.screen_stack):
+            try:
+                return screen.query_one("#status-bar")
+            except Exception:
+                continue
+        return None
+
     def _ui_status(self, text):
         _log(f"STATUS: {text}")
-        self.app.call_from_thread(self._set_status_text, text)
-
-    def _set_status_text(self, text):
-        try:
-            self.app.query_one("#status-bar").update_status(text)
-        except Exception:
-            pass
+        bar = self._find_status_bar()
+        if bar:
+            bar.update_status(text)
 
     def _ui_progress(self, pct, stage, done=0):
-        self.app.call_from_thread(self._set_progress, pct, stage, done)
-
-    def _set_progress(self, pct, stage, done):
-        try:
-            self.app.query_one("#status-bar").update_progress(
-                pct=pct, stage=stage, done=done)
-        except Exception:
-            pass
+        bar = self._find_status_bar()
+        if bar:
+            bar.update_progress(pct=pct, stage=stage, done=done)
 
     async def run(self, selected_books: list) -> None:
         app = self.app
