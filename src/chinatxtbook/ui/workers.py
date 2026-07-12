@@ -1,209 +1,228 @@
-"""Async workers for background tasks.
+"""Background download pipeline worker.
 
-PipelineWorker runs the full download pipeline with live TUI progress.
+Handles clone→checkout→scan→merge→verify with real-time progress.
+Handles both single PDFs and split PDFs. Output goes to OUTPUT_DIR.
 """
 
 import asyncio
 import os
-from datetime import datetime
+import shutil
 from pathlib import Path
 
-from chinatxtbook.config import WORK_DIR, OUTPUT_DIR, DEFAULT_WORKERS
+from chinatxtbook.config import WORK_DIR, OUTPUT_DIR, DEFAULT_WORKERS, CHUNK_SIZE
 from chinatxtbook.utils.format import fmt_size
+from chinatxtbook.core.manifest import SplitManifest, SPLIT_RE
 
 
 class PipelineWorker:
-    """Runs clone→checkout→scan→merge→verify with live status bar updates.
+    """Runs clone→checkout→merge→verify pipeline with TUI progress."""
 
-    All progress goes to the StatusBarWidget via _update_status.
-    """
-
-    STAGES = ["Preparing", "Downloading", "Scanning", "Merging", "Verifying", "Done"]
+    STAGES = ["Preparing", "Downloading", "Merging", "Done"]
 
     def __init__(self, app):
         self.app = app
-        self._interrupted = False
 
     async def run(self, selected_books: list) -> None:
-        """Execute full pipeline for selected books."""
         app = self.app
         total = len(selected_books)
 
         def _status(text):
             try:
-                bar = app.query_one("#status-bar")
-                bar.update_status(text)
-            except Exception as e:
-                app._log_buffer.append(("ERROR", f"Status update failed: {e}"))
+                app.query_one("#status-bar").update_status(text)
+            except Exception:
+                pass
 
-        def _progress(pct, stage, current="", done=0):
+        def _progress(pct, stage, done=0):
             try:
-                bar = app.query_one("#status-bar")
-                bar.update_progress(pct=pct, stage=stage, current=current,
-                                    done=done, total=total)
-            except Exception as e:
-                app._log_buffer.append(("ERROR", f"Progress update failed: {e}"))
+                app.query_one("#status-bar").update_progress(
+                    pct=pct, stage=stage, done=done, total=total)
+            except Exception:
+                pass
 
-        _status(f"⏳ 准备处理 {total} 册教材...")
-
-        # ── Stage 1: Preparing ─────────────────────────────
+        _status(f"Processing {total} books...")
         _progress(5, "Preparing")
 
         git = app.git_client
         state = app.state
 
-        # Clone if needed
+        # ── Ensure repo is ready ────────────────────────────
         if not git.is_repo_valid():
-            _status("📥 正在克隆仓库...")
+            _status("Cloning repository (may take a while)...")
             await asyncio.to_thread(git.clone, git.repo_url)
             if not git.is_repo_valid():
-                _status("❌ 仓库克隆失败")
+                _status("ERROR: Clone failed")
                 app.pipeline_running = False
                 return
-            _status("✅ 仓库克隆完成")
             app._check_repo_status()
-
-        # Ensure default branch
-        branch = state.get("default_branch", "master")
-        if not state.get("default_branch"):
-            branch = git.detect_default_branch(state)
 
         _progress(10, "Preparing")
 
-        # ── Stage 2: Downloading (checkout) ────────────────
-        _progress(20, "Downloading")
-
-        # Collect selected paths from books (clean, no trailing slash)
-        selected_paths = set()
+        # ── Collect unique directories from selected books ──
+        dirs = set()
         for book in selected_books:
             path = book.get("path", "").rstrip("/")
             if path:
-                selected_paths.add(path)
+                dirs.add(path)
 
-        if not selected_paths:
-            _status("❌ 无法确定下载路径")
+        if not dirs:
+            _status("ERROR: No directories to download")
             app.pipeline_running = False
             return
 
-        state["selected_paths"] = sorted(p + "/" for p in selected_paths)
-        state["target_dirs"] = sorted(selected_paths)
+        checkout_paths = sorted(d + "/" for d in dirs)
+        state["selected_paths"] = checkout_paths
 
-        # Validate paths exist in tree
-        for p in list(selected_paths):
-            if not git.path_exists_in_tree(p):
-                _status(f"⚠️ 路径不存在: {p}")
-                selected_paths.discard(p)
-
-        if not selected_paths:
-            _status("❌ 无有效路径")
-            app.pipeline_running = False
-            return
-
-        # Sparse checkout (git needs trailing / for directories)
-        checkout_paths = [p + "/" for p in selected_paths]
-        _status(f"📥 下载 {len(checkout_paths)} 个目录 (可能需要几分钟)...")
+        # ── Download files via sparse-checkout ──────────────
+        _status(f"Downloading {len(dirs)} directories...")
+        _progress(20, "Downloading")
 
         try:
-            # Set sparse-checkout rules
             await asyncio.to_thread(git.sparse_checkout, checkout_paths)
-            # Checkout triggers blob fetching (can be slow on first run)
+            branch = state.get("default_branch", "master")
             await asyncio.wait_for(
                 asyncio.to_thread(git.checkout, branch),
-                timeout=300  # 5 min timeout
+                timeout=300,
             )
         except asyncio.TimeoutError:
-            _status("❌ 下载超时 (5分钟) — 请检查网络后重试")
+            _status("ERROR: Download timed out (5 min) - check network")
             app.pipeline_running = False
             return
         except Exception as e:
-            _status(f"❌ 下载失败: {str(e)[:60]}")
+            _status(f"ERROR: Download failed - {str(e)[:60]}")
             app.pipeline_running = False
             return
 
         _progress(50, "Downloading")
 
-        # ── Stage 3: Scanning ──────────────────────────────
-        _progress(60, "Scanning")
-        _status(f"🔍 扫描分卷文件...")
+        # Verify files actually exist
+        found = 0
+        for book in selected_books:
+            for part_info in book.get("parts", {}).values():
+                fname = part_info[0] if isinstance(part_info, tuple) else part_info
+                file_path = WORK_DIR / book["path"] / fname
+                if file_path.exists():
+                    found += 1
+                    break
 
-        await asyncio.to_thread(self._scan, state, selected_paths, git)
-        _progress(70, "Scanning")
-
-        # ── Stage 4+5: Merge + Verify ──────────────────────
-        _status(f"🔄 合并与校验 {len(selected_books)} 册...")
-        _progress(75, "Merging")
-
-        # Build manifest — flatten ls_tree results (each returns a list)
-        from chinatxtbook.core.manifest import SplitManifest
-
-        all_files = []
-        for p in selected_paths:
-            p_clean = p.rstrip("/")
-            all_files.extend(git.ls_tree(p_clean, recursive=True))
-        ls_out = "\n".join(all_files)
-        manifest = SplitManifest.build_expected_manifest(
-            ls_out, [p.rstrip("/") for p in selected_paths]
-        )
-        if manifest is None:
-            _status("❌ Git 树清单读取失败 (fail-closed)")
+        if found == 0:
+            _status("ERROR: No files downloaded - check network/Git LFS")
             app.pipeline_running = False
             return
 
-        # Create output directory
+        _status(f"Downloaded: {found}/{total} books have files")
+
+        # ── Merge & copy to output ──────────────────────────
+        _progress(60, "Merging")
         OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-        # Run merge
-        from chinatxtbook.core.downloader import DownloadOrchestrator
-        orchestrator = DownloadOrchestrator(
-            git_client=git,
-            state_manager=app.state_mgr,
-            log_callback=lambda msg, level="INFO": None,
-        )
+        success = 0
+        failed = 0
+        skipped = 0
 
-        ok = await asyncio.to_thread(
-            orchestrator.merge,
-            state, manifest,
-            clean=False, dry_run=False,
-            workers=DEFAULT_WORKERS, verify=True,
-            output_dir=OUTPUT_DIR,
-        )
+        for i, book in enumerate(selected_books):
+            _progress(60 + int(35 * (i + 1) / total), "Merging", done=i + 1)
+            _status(f"Processing [{i+1}/{total}]: {book['name'][:40]}")
 
-        _progress(95, "Verifying")
+            rel_dir = book["path"]
+            base = book["name"]
+            parts = book.get("parts", {})
+            part_count = book.get("part_count", 1)
 
-        # ── Done ───────────────────────────────────────────
-        if ok:
-            _status(f"✅ 完成! {total} 册已处理 → {OUTPUT_DIR.resolve()}")
-            _progress(100, "Done", done=total)
+            # Check source files exist
+            source_dir = WORK_DIR / rel_dir
+            all_present = True
+            for part_info in parts.values():
+                fname = part_info[0] if isinstance(part_info, tuple) else part_info
+                if not (source_dir / fname).exists():
+                    all_present = False
+                    break
+
+            if not all_present:
+                _status(f"  SKIP: source files missing for {base[:30]}")
+                failed += 1
+                continue
+
+            # Output path
+            out_dir = OUTPUT_DIR / rel_dir
+            out_dir.mkdir(parents=True, exist_ok=True)
+            out_file = out_dir / base
+
+            try:
+                if part_count == 1:
+                    # Single PDF: copy directly to output
+                    fname = list(parts.values())[0]
+                    fname = fname[0] if isinstance(fname, tuple) else fname
+                    src = source_dir / fname
+                    # Atomic copy
+                    tmp = out_dir / f"{base}.tmp"
+                    tmp.unlink(missing_ok=True)
+                    shutil.copy2(src, tmp)
+                    os.replace(str(tmp), str(out_file))
+                    success += 1
+                else:
+                    # Split PDF: merge parts
+                    await self._merge_parts(source_dir, out_dir, base, parts)
+                    success += 1
+            except Exception as e:
+                _status(f"  FAIL: {base[:30]} - {str(e)[:40]}")
+                failed += 1
+                continue
+
+        _progress(100, "Done", done=success + skipped)
+
+        if failed:
+            _status(f"DONE: {success} ok, {failed} failed → {OUTPUT_DIR.resolve()}")
         else:
-            fails = state.get("last_failures", {})
-            _status(f"⚠️ {len(fails)} 册失败，详见日志")
-            _progress(100, "Done", done=total - len(fails))
+            _status(f"COMPLETE: {success} books → {OUTPUT_DIR.resolve()}")
 
-        app.state = state
         app.pipeline_running = False
 
-        # Refresh catalog
-        try:
-            screen = app.screen
-            if hasattr(screen, '_init_catalog'):
-                screen._init_catalog()
-        except Exception:
-            pass
+    async def _merge_parts(self, source_dir, out_dir, base, parts):
+        """Merge split PDF parts into a single output file."""
+        import hashlib
+        out_file = out_dir / base
+        tmp_file = out_dir / f"{base}.tmp"
+        tmp_file.unlink(missing_ok=True)
 
-        # Log to buffer
-        app._log_buffer.append(("OK", f"处理完成: {total} 册 → {OUTPUT_DIR}"))
+        expected_size = 0
+        for idx in sorted(parts):
+            p = parts[idx]
+            fname = p[0] if isinstance(p, tuple) else p
+            expected_size += (source_dir / fname).stat().st_size
 
-    def _scan(self, state, selected_paths, git):
-        """Scan directories for split files."""
-        from chinatxtbook.core.manifest import SPLIT_RE
-        import os
-        from pathlib import Path
+        stream_hash = hashlib.sha256()
+        written = 0
+        with open(tmp_file, "wb") as out_f:
+            for idx in sorted(parts):
+                p = parts[idx]
+                fname = p[0] if isinstance(p, tuple) else p
+                with open(source_dir / fname, "rb") as in_f:
+                    while True:
+                        chunk = in_f.read(CHUNK_SIZE)
+                        if not chunk:
+                            break
+                        out_f.write(chunk)
+                        stream_hash.update(chunk)
+                        written += len(chunk)
+                # Clean up source part if requested
+            out_f.flush()
+            os.fsync(out_f.fileno())
 
-        dirs = set()
-        for p in selected_paths:
-            files = git.ls_tree(p, recursive=True)
-            for f in files:
-                if SPLIT_RE.match(os.path.basename(f)):
-                    rel = str(Path(f).parent.as_posix())
-                    dirs.add(rel)
-        state["target_dirs"] = sorted(dirs)
+        if written != expected_size:
+            tmp_file.unlink(missing_ok=True)
+            raise IOError(f"Size mismatch: {written} vs {expected_size}")
+
+        # Re-read verify
+        r_hash = hashlib.sha256()
+        with open(tmp_file, "rb") as f:
+            while True:
+                chunk = f.read(CHUNK_SIZE)
+                if not chunk:
+                    break
+                r_hash.update(chunk)
+
+        if stream_hash.hexdigest() != r_hash.hexdigest():
+            tmp_file.unlink(missing_ok=True)
+            raise IOError("SHA256 mismatch - storage may be corrupt")
+
+        os.replace(str(tmp_file), str(out_file))
