@@ -64,7 +64,16 @@ class TasksScreen(ModalScreen):
         if event.button.id == "task-close":
             self.dismiss()
         elif event.button.id == "task-cancel":
-            self.notify("取消任务...", severity="warning")
+            app = self.app
+            if app and hasattr(app, 'pipeline_running') and app.pipeline_running:
+                if not getattr(app, '_quit_warned', False):
+                    app._quit_warned = True
+                    self.notify("已请求取消 — 等待当前操作完成（再次按取消强制退出）", severity="warning")
+                else:
+                    self.notify("强制退出...", severity="error")
+                    app.exit()
+            else:
+                self.notify("没有正在运行的任务", severity="information")
         elif event.button.id == "task-retry":
             self.notify("重试任务...", severity="information")
 
