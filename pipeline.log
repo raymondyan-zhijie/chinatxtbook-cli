@@ -1,0 +1,23 @@
+[22:40:19] === PIPELINE START: 1 books ===
+[22:40:19] selected_books count: 1
+[22:40:19]   [0] key=初中/体育与健康/人教版-人民教育出版社/七年级/义务教育教科书·体育与健康七年级全一册.pdf path=初中/体育与健康/人教版-人民教育出版社/七年级 name=义务教育教科书·体育与健康七年级全一册.pdf parts=1
+[22:40:19] app.selected_keys count: 2
+[22:40:19] STATUS: Step 1: Checking repo...
+[22:40:19]   (status bar update failed: No nodes match '#status-bar' on Screen(id='_default'))
+[22:40:19] Repo valid: True
+[22:40:19] Unique dirs to download: 1
+[22:40:19]   dir: 初中/体育与健康/人教版-人民教育出版社/七年级
+[22:40:19] checkout_paths: ['初中/体育与健康/人教版-人民教育出版社/七年级/']
+[22:40:19] STATUS: Downloading 1 dirs...
+[22:40:19]   (status bar update failed: No nodes match '#status-bar' on Screen(id='_default'))
+[22:40:19] Running sparse_checkout...
+[22:40:19] sparse_checkout done, running checkout...
+[22:40:19] branch: master
+[22:40:19] checkout done
+[22:40:19] STATUS: Verifying files...
+[22:40:19]   (status bar update failed: No nodes match '#status-bar' on Screen(id='_default'))
+[22:40:19] File check: 0 books have files, 1 missing
+[22:40:19] No files found. Checking workspace content:
+[22:40:19]   初中/体育与健康/人教版-人民教育出版社/七年级/ does NOT exist on disk
+[22:40:19] STATUS: ERROR: No files downloaded - check network
+[22:40:19]   (status bar update failed: No nodes match '#status-bar' on Screen(id='_default'))

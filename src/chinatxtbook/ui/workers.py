@@ -1,7 +1,4 @@
-"""Background download pipeline worker.
-
-All steps logged to pipeline.log for diagnostics.
-"""
+"""Background download pipeline worker with full diagnostic logging."""
 
 import asyncio
 import os
@@ -11,49 +8,51 @@ from pathlib import Path
 
 from chinatxtbook.config import WORK_DIR, OUTPUT_DIR, CHUNK_SIZE
 
-# ── Diagnostic log ────────────────────────────────────────────
-
 LOG_FILE = Path("pipeline.log")
 
+
 def _log(msg: str):
-    """Write to both console and log file."""
     ts = datetime.now().strftime("%H:%M:%S")
     line = f"[{ts}] {msg}"
     print(line, flush=True)
     try:
         with open(LOG_FILE, "a", encoding="utf-8") as f:
             f.write(line + "\n")
+            f.flush()
     except Exception:
         pass
 
 
 class PipelineWorker:
-    """Runs clone→checkout→merge→verify pipeline."""
 
     def __init__(self, app):
         self.app = app
+
+    def _ui_status(self, text):
+        _log(f"STATUS: {text}")
+        self.app.call_from_thread(self._set_status_text, text)
+
+    def _set_status_text(self, text):
+        try:
+            self.app.query_one("#status-bar").update_status(text)
+        except Exception:
+            pass
+
+    def _ui_progress(self, pct, stage, done=0):
+        self.app.call_from_thread(self._set_progress, pct, stage, done)
+
+    def _set_progress(self, pct, stage, done):
+        try:
+            self.app.query_one("#status-bar").update_progress(
+                pct=pct, stage=stage, done=done)
+        except Exception:
+            pass
 
     async def run(self, selected_books: list) -> None:
         app = self.app
         total = len(selected_books)
         _log(f"=== PIPELINE START: {total} books ===")
 
-        def _status(text):
-            _log(f"STATUS: {text}")
-            try:
-                app.query_one("#status-bar").update_status(text)
-            except Exception as e:
-                _log(f"  (status bar update failed: {e})")
-
-        def _progress(pct, stage, done=0):
-            try:
-                app.query_one("#status-bar").update_progress(
-                    pct=pct, stage=stage, done=done, total=total)
-            except Exception:
-                pass
-
-        # ── Dump selection info ──────────────────────────────
-        _log(f"selected_books count: {len(selected_books)}")
         for i, b in enumerate(selected_books[:5]):
             _log(f"  [{i}] key={b.get('key','?')} path={b.get('path','?')} "
                  f"name={b.get('name','?')[:40]} parts={b.get('part_count',0)}")
@@ -62,208 +61,195 @@ class PipelineWorker:
         git = app.git_client
         state = app.state
 
-        # ── Step 1: Ensure repo ──────────────────────────────
-        _status(f"Step 1: Checking repo...")
+        # Step 1: Ensure repo
+        self._ui_status("Step 1: Checking repo...")
         _log(f"Repo valid: {git.is_repo_valid()}")
         if not git.is_repo_valid():
-            _status("Cloning repo...")
-            _log("Starting clone...")
+            self._ui_status("Cloning repo...")
             await asyncio.to_thread(git.clone, git.repo_url)
-            _log(f"After clone - repo valid: {git.is_repo_valid()}")
             if not git.is_repo_valid():
-                _status("ERROR: Clone failed")
+                self._ui_status("ERROR: Clone failed")
                 app.pipeline_running = False
                 return
 
-        # ── Step 2: Collect directories ──────────────────────
+        # Step 2: Collect dirs
         dirs = set()
         for book in selected_books:
             path = book.get("path", "").rstrip("/")
             if path:
                 dirs.add(path)
-        _log(f"Unique dirs to download: {len(dirs)}")
+        _log(f"Unique dirs: {len(dirs)}")
         for d in sorted(dirs):
             _log(f"  dir: {d}")
 
         if not dirs:
-            _status("ERROR: No directories")
+            self._ui_status("ERROR: No directories")
             app.pipeline_running = False
             return
 
         checkout_paths = sorted(d + "/" for d in dirs)
-        _log(f"checkout_paths: {checkout_paths}")
 
-        # ── Step 3: Download ─────────────────────────────────
-        _status(f"Downloading {len(dirs)} dirs...")
-        _progress(20, "Downloading")
+        # Step 3: Fetch + Checkout
+        self._ui_status(f"Fetching updates...")
+        self._ui_progress(10, "Downloading")
+        branch = state.get("default_branch", "master")
 
         try:
-            _log("Running sparse_checkout...")
+            # Fetch is critical for blobless clones
+            _log("git fetch...")
+            await asyncio.to_thread(git.fetch, branch)
+            _log("git fetch done")
+
+            self._ui_status(f"Downloading {len(dirs)} directories...")
+            _log("sparse_checkout...")
             await asyncio.to_thread(git.sparse_checkout, checkout_paths)
-            _log("sparse_checkout done, running checkout...")
-            branch = state.get("default_branch", "master")
-            _log(f"branch: {branch}")
+            _log("sparse_checkout done, checkout...")
+            self._ui_progress(30, "Downloading")
             await asyncio.wait_for(
                 asyncio.to_thread(git.checkout, branch),
-                timeout=300,
+                timeout=600,
             )
             _log("checkout done")
         except asyncio.TimeoutError:
-            _log("TIMEOUT: checkout took >5 min")
-            _status("ERROR: Download timed out")
+            _log("TIMEOUT")
+            self._ui_status("ERROR: Download timed out (10 min)")
             app.pipeline_running = False
             return
         except Exception as e:
-            _log(f"ERROR during checkout: {e}")
-            _status(f"ERROR: {str(e)[:60]}")
+            _log(f"Download error: {e}")
+            self._ui_status(f"ERROR: {str(e)[:60]}")
             app.pipeline_running = False
             return
 
-        # ── Step 4: Verify files exist ───────────────────────
-        _status("Verifying files...")
-        found_books = 0
-        missing_books = 0
+        # Step 4: Verify files
+        self._ui_status("Verifying files...")
+        found = 0
         for book in selected_books:
-            source_dir = WORK_DIR / book["path"]
-            found_any = False
-            for part_info in book.get("parts", {}).values():
-                fname = part_info[0] if isinstance(part_info, tuple) else part_info
-                fp = source_dir / fname
-                exists = fp.exists()
-                if exists:
-                    found_any = True
-            if found_any:
-                found_books += 1
-            else:
-                missing_books += 1
+            sd = WORK_DIR / book["path"]
+            ok = False
+            for pi in book.get("parts", {}).values():
+                fn = pi[0] if isinstance(pi, tuple) else pi
+                if (sd / fn).exists():
+                    ok = True
+                    break
+            if ok:
+                found += 1
 
-        _log(f"File check: {found_books} books have files, {missing_books} missing")
-        if found_books == 0:
-            # Check what actually exists in workspace
-            _log("No files found. Checking workspace content:")
-            for d in dirs:
+        _log(f"Files on disk: {found}/{total}")
+        if found == 0:
+            for d in list(dirs)[:3]:
                 p = WORK_DIR / d
                 if p.exists():
-                    contents = list(p.iterdir())[:5]
-                    _log(f"  {d}/ exists, contents: {[c.name for c in contents]}")
+                    _log(f"  {d}/ exists: {[c.name for c in list(p.iterdir())[:5]]}")
                 else:
-                    _log(f"  {d}/ does NOT exist on disk")
-            _status("ERROR: No files downloaded - check network")
+                    _log(f"  {d}/ MISSING")
+            self._ui_status("ERROR: No files downloaded")
             app.pipeline_running = False
             return
 
-        _status(f"Found {found_books}/{total} books on disk")
+        self._ui_status(f"Found {found}/{total} books on disk")
+        self._ui_progress(50, "Merging")
 
-        # ── Step 5: Merge/copy ───────────────────────────────
-        _progress(60, "Merging")
+        # Step 5: Merge/copy to output
         OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-        _log(f"Output dir: {OUTPUT_DIR.resolve()}")
-
-        success = 0
-        failed = 0
+        _log(f"Output: {OUTPUT_DIR.resolve()}")
+        ok_count = 0
+        fail_count = 0
 
         for i, book in enumerate(selected_books):
-            _progress(60 + int(35 * (i + 1) / total), "Merging", done=i + 1)
+            pct = 50 + int(45 * (i + 1) / total)
+            self._ui_progress(pct, "Merging", done=i + 1)
 
-            rel_dir = book["path"]
+            rd = book["path"]
             base = book["name"]
             parts = book.get("parts", {})
-            part_count = book.get("part_count", 1)
+            pc = book.get("part_count", 1)
 
-            source_dir = WORK_DIR / rel_dir
-            out_dir = OUTPUT_DIR / rel_dir
-            out_dir.mkdir(parents=True, exist_ok=True)
-            out_file = out_dir / base
+            sd = WORK_DIR / rd
+            od = OUTPUT_DIR / rd
+            od.mkdir(parents=True, exist_ok=True)
+            of = od / base
 
-            # Check source
-            all_present = True
-            for part_info in parts.values():
-                fname = part_info[0] if isinstance(part_info, tuple) else part_info
-                if not (source_dir / fname).exists():
-                    all_present = False
-                    _log(f"  MISSING: {rel_dir}/{fname}")
+            # Check source files
+            missing = False
+            for pi in parts.values():
+                fn = pi[0] if isinstance(pi, tuple) else pi
+                if not (sd / fn).exists():
+                    missing = True
+                    _log(f"  MISSING: {rd}/{fn}")
                     break
-
-            if not all_present:
-                _log(f"  SKIP [{i+1}/{total}]: {base} - source files missing")
-                failed += 1
+            if missing:
+                fail_count += 1
                 continue
 
             try:
-                if part_count <= 1:
-                    fname = list(parts.values())[0]
-                    fname = fname[0] if isinstance(fname, tuple) else fname
-                    src = source_dir / fname
-                    tmp = out_dir / f"{base}.tmp"
+                if pc <= 1:
+                    fn = list(parts.values())[0]
+                    fn = fn[0] if isinstance(fn, tuple) else fn
+                    src = sd / fn
+                    tmp = od / f"{base}.tmp"
                     tmp.unlink(missing_ok=True)
                     shutil.copy2(src, tmp)
-                    os.replace(str(tmp), str(out_file))
-                    sz = out_file.stat().st_size
-                    _log(f"  OK [{i+1}/{total}]: {base} ({sz} bytes) → {out_file}")
-                    success += 1
+                    os.replace(str(tmp), str(of))
+                    _log(f"  OK [{i+1}/{total}]: {base} ({of.stat().st_size}B)")
+                    ok_count += 1
                 else:
-                    await self._merge_parts(source_dir, out_dir, base, parts)
-                    sz = out_file.stat().st_size
-                    _log(f"  OK [{i+1}/{total}]: {base} ({sz} bytes, {part_count} parts merged) → {out_file}")
-                    success += 1
+                    await self._merge(sd, od, base, parts)
+                    _log(f"  OK [{i+1}/{total}]: {base} merged ({of.stat().st_size}B)")
+                    ok_count += 1
             except Exception as e:
                 _log(f"  FAIL [{i+1}/{total}]: {base} - {e}")
-                failed += 1
+                fail_count += 1
 
-        _progress(100, "Done", done=success)
-        _log(f"=== PIPELINE DONE: {success} ok, {failed} failed ===")
-
-        if failed:
-            _status(f"DONE: {success} ok, {failed} failed → {OUTPUT_DIR}")
-        else:
-            _status(f"COMPLETE: {success} books → {OUTPUT_DIR}")
-
+        self._ui_progress(100, "Done", done=ok_count)
+        msg = f"COMPLETE: {ok_count} ok"
+        if fail_count:
+            msg += f", {fail_count} failed"
+        msg += f" -> {OUTPUT_DIR}"
+        self._ui_status(msg)
+        _log(f"=== PIPELINE DONE: {ok_count} ok, {fail_count} failed ===")
         app.pipeline_running = False
 
-    async def _merge_parts(self, source_dir, out_dir, base, parts):
-        """Merge split PDF parts to output."""
+    async def _merge(self, sd, od, base, parts):
         import hashlib
-        out_file = out_dir / base
-        tmp_file = out_dir / f"{base}.tmp"
-        tmp_file.unlink(missing_ok=True)
+        of = od / base
+        tf = od / f"{base}.tmp"
+        tf.unlink(missing_ok=True)
 
-        expected = 0
-        for idx in sorted(parts):
-            p = parts[idx]
-            fname = p[0] if isinstance(p, tuple) else p
-            expected += (source_dir / fname).stat().st_size
+        exp = sum((sd / (p[0] if isinstance(p, tuple) else p)).stat().st_size
+                  for p in parts.values())
 
         h = hashlib.sha256()
-        written = 0
-        with open(tmp_file, "wb") as out_f:
+        w = 0
+        with open(tf, "wb") as out:
             for idx in sorted(parts):
                 p = parts[idx]
-                fname = p[0] if isinstance(p, tuple) else p
-                with open(source_dir / fname, "rb") as in_f:
+                fn = p[0] if isinstance(p, tuple) else p
+                with open(sd / fn, "rb") as inp:
                     while True:
-                        chunk = in_f.read(CHUNK_SIZE)
-                        if not chunk:
+                        c = inp.read(CHUNK_SIZE)
+                        if not c:
                             break
-                        out_f.write(chunk)
-                        h.update(chunk)
-                        written += len(chunk)
-            out_f.flush()
-            os.fsync(out_f.fileno())
+                        out.write(c)
+                        h.update(c)
+                        w += len(c)
+            out.flush()
+            os.fsync(out.fileno())
 
-        if written != expected:
-            tmp_file.unlink(missing_ok=True)
-            raise IOError(f"Size mismatch: {written} vs {expected}")
+        if w != exp:
+            tf.unlink(missing_ok=True)
+            raise IOError(f"Size mismatch: {w} vs {exp}")
 
-        r_hash = hashlib.sha256()
-        with open(tmp_file, "rb") as f:
+        rh = hashlib.sha256()
+        with open(tf, "rb") as f:
             while True:
-                chunk = f.read(CHUNK_SIZE)
-                if not chunk:
+                c = f.read(CHUNK_SIZE)
+                if not c:
                     break
-                r_hash.update(chunk)
+                rh.update(c)
 
-        if h.hexdigest() != r_hash.hexdigest():
-            tmp_file.unlink(missing_ok=True)
+        if h.hexdigest() != rh.hexdigest():
+            tf.unlink(missing_ok=True)
             raise IOError("SHA256 mismatch")
 
-        os.replace(str(tmp_file), str(out_file))
+        os.replace(str(tf), str(of))
