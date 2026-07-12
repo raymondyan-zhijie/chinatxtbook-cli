@@ -95,6 +95,12 @@ class PipelineWorker:
         branch = state.get("default_branch", "master")
 
         try:
+            # Clean stale git lock files (from previous crashes)
+            lock_file = WORK_DIR / ".git" / "index.lock"
+            if lock_file.exists():
+                _log(f"Removing stale lock: {lock_file}")
+                lock_file.unlink(missing_ok=True)
+
             # Fetch all objects (critical for blobless clones behind slow networks)
             _log("git fetch origin...")
             self._ui_status("Fetching repo data...")
@@ -124,15 +130,23 @@ class PipelineWorker:
             all_paths = list(set(all_paths))
             _log(f"Restoring {len(all_paths)} files...")
 
-            # Restore in batches
+            # Restore in batches, retrying on lock failures
             for i in range(0, len(all_paths), 50):
                 batch = all_paths[i:i + 50]
-                ok, _, err = git.run(
-                    ["restore", "--source=HEAD", "--worktree", "--"] + batch,
-                    allow_fetch=True, retry=1,
-                )
-                if not ok:
-                    _log(f"restore batch failed: {err[:100]}")
+                for attempt in range(3):
+                    ok, _, err = git.run(
+                        ["restore", "--source=HEAD", "--worktree", "--"] + batch,
+                        allow_fetch=True, retry=1,
+                    )
+                    if ok:
+                        break
+                    _log(f"restore attempt {attempt+1} failed: {err[:100]}")
+                    # Clean lock file and retry
+                    lock = WORK_DIR / ".git" / "index.lock"
+                    if lock.exists():
+                        lock.unlink(missing_ok=True)
+                        _log("  cleaned index.lock, retrying...")
+                    await asyncio.sleep(1)
                 pct = 20 + int(30 * (i + len(batch)) / max(len(all_paths), 1))
                 self._ui_progress(min(pct, 50), "Downloading")
 

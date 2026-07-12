@@ -1,49 +1,25 @@
-[22:40:19] === PIPELINE START: 1 books ===
-[22:40:19] selected_books count: 1
-[22:40:19]   [0] key=初中/体育与健康/人教版-人民教育出版社/七年级/义务教育教科书·体育与健康七年级全一册.pdf path=初中/体育与健康/人教版-人民教育出版社/七年级 name=义务教育教科书·体育与健康七年级全一册.pdf parts=1
-[22:40:19] app.selected_keys count: 2
-[22:40:19] STATUS: Step 1: Checking repo...
-[22:40:19]   (status bar update failed: No nodes match '#status-bar' on Screen(id='_default'))
-[22:40:19] Repo valid: True
-[22:40:19] Unique dirs to download: 1
-[22:40:19]   dir: 初中/体育与健康/人教版-人民教育出版社/七年级
-[22:40:19] checkout_paths: ['初中/体育与健康/人教版-人民教育出版社/七年级/']
-[22:40:19] STATUS: Downloading 1 dirs...
-[22:40:19]   (status bar update failed: No nodes match '#status-bar' on Screen(id='_default'))
-[22:40:19] Running sparse_checkout...
-[22:40:19] sparse_checkout done, running checkout...
-[22:40:19] branch: master
-[22:40:19] checkout done
-[22:40:19] STATUS: Verifying files...
-[22:40:19]   (status bar update failed: No nodes match '#status-bar' on Screen(id='_default'))
-[22:40:19] File check: 0 books have files, 1 missing
-[22:40:19] No files found. Checking workspace content:
-[22:40:19]   初中/体育与健康/人教版-人民教育出版社/七年级/ does NOT exist on disk
-[22:40:19] STATUS: ERROR: No files downloaded - check network
-[22:40:19]   (status bar update failed: No nodes match '#status-bar' on Screen(id='_default'))
-[22:50:55] === PIPELINE START: 6 books ===
-[22:50:55]   [0] key=小学/数学/人教版/义务教育教科书 · 数学一年级上册.pdf path=小学/数学/人教版 name=义务教育教科书 · 数学一年级上册.pdf parts=1
-[22:50:55]   [1] key=小学/数学/人教版/义务教育教科书 · 数学三年级上册.pdf path=小学/数学/人教版 name=义务教育教科书 · 数学三年级上册.pdf parts=1
-[22:50:55]   [2] key=小学/数学/人教版/义务教育教科书 · 数学六年级上册.pdf path=小学/数学/人教版 name=义务教育教科书 · 数学六年级上册.pdf parts=1
-[22:50:55]   [3] key=小学/数学/人教版/义务教育教科书 · 数学四年级上册.pdf path=小学/数学/人教版 name=义务教育教科书 · 数学四年级上册.pdf parts=1
-[22:50:55]   [4] key=小学/数学/人教版/义务教育教科书·数学二年级下册.pdf path=小学/数学/人教版 name=义务教育教科书·数学二年级下册.pdf parts=1
-[22:50:55] app.selected_keys count: 6
-[22:50:55] STATUS: Step 1: Checking repo...
-[22:53:50] === PIPELINE START: 1 books ===
-[22:53:50]   [0] key=初中/体育与健康/人教版-人民教育出版社/八年级/义务教育教科书·体育与健康八年级全一册.pdf path=初中/体育与健康/人教版-人民教育出版社/八年级 name=义务教育教科书·体育与健康八年级全一册.pdf parts=1
-[22:53:50] app.selected_keys count: 2
-[22:53:50] STATUS: Step 1: Checking repo...
-[22:53:50] Repo valid: True
-[22:53:50] Unique dirs: 1
-[22:53:50]   dir: 初中/体育与健康/人教版-人民教育出版社/八年级
-[22:53:50] STATUS: Fetching updates...
-[22:53:50] git fetch...
-[22:53:51] git fetch done
-[22:53:51] STATUS: Downloading 1 directories...
-[22:53:51] sparse_checkout...
-[22:53:51] sparse_checkout done, checkout...
-[22:53:51] checkout done
-[22:53:51] STATUS: Verifying files...
-[22:53:51] Files on disk: 0/1
-[22:53:51]   初中/体育与健康/人教版-人民教育出版社/八年级/ MISSING
-[22:53:51] STATUS: ERROR: No files downloaded
+[23:34:39] === PIPELINE START: 3 books ===
+[23:34:39]   [0] key=小学/数学/人教版/义务教育教科书 · 数学一年级上册.pdf path=小学/数学/人教版 name=义务教育教科书 · 数学一年级上册.pdf parts=1
+[23:34:39]   [1] key=小学/数学/人教版/义务教育教科书 · 数学二年级上册.pdf path=小学/数学/人教版 name=义务教育教科书 · 数学二年级上册.pdf parts=1
+[23:34:39]   [2] key=小学/数学/人教版/义务教育教科书 · 数学六年级上册.pdf path=小学/数学/人教版 name=义务教育教科书 · 数学六年级上册.pdf parts=1
+[23:34:39] app.selected_keys count: 3
+[23:34:39] STATUS: Step 1: Checking repo...
+[23:34:39] Repo valid: True
+[23:34:39] Unique dirs: 1
+[23:34:39]   dir: 小学/数学/人教版
+[23:34:39] STATUS: Fetching updates...
+[23:34:39] git fetch origin...
+[23:34:39] STATUS: Fetching repo data...
+[23:34:40] git fetch done
+[23:34:40] sparse_checkout...
+[23:34:40] sparse_checkout done
+[23:34:40] STATUS: Restoring 1 dirs...
+[23:34:40] Restoring 3 files...
+[23:34:40] restore batch failed: fatal: Unable to create 'D:/TextBook/ChinaTextbook_Workspace/.git/index.lock': File exists.
+
+Another
+[23:34:40] restore done
+[23:34:40] STATUS: Verifying files...
+[23:34:40] Files on disk: 0/3
+[23:34:40]   小学/数学/人教版/ MISSING
+[23:34:40] STATUS: ERROR: No files downloaded
