@@ -72,7 +72,7 @@ class ConfirmOverlay(ModalScreen):
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "confirm-yes":
             self.dismiss(True)
-        elif event.button.id == "confirm-no":
+        else:
             self.dismiss(False)
 
     def action_dismiss(self) -> None:

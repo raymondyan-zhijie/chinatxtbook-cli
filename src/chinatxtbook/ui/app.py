@@ -128,21 +128,27 @@ class ChinaTextbookApp(App):
             return
         self.push_screen(SelectedScreen())
 
-    async def action_confirm_download(self) -> None:
+    def action_confirm_download(self) -> None:
+        """[F5] Show download confirmation, start on confirm."""
         if self.pipeline_running:
             self.notify("下载任务正在进行中", severity="warning")
             return
         if not self.selected_keys:
             self.notify("请先在左侧目录树中展开到底层，然后 Space 选择教材", severity="warning")
             return
-        confirmed = await self.push_screen_wait(ConfirmOverlay())
-        if confirmed:
-            selected = [b for b in self._catalog_books if b.get("key") in self.selected_keys]
-            self.notify(f"开始下载 {len(selected)} 册...", severity="information")
-            self.pipeline_running = True
-            from chinatxtbook.ui.workers import PipelineWorker
-            worker = PipelineWorker(self)
-            self.run_worker(worker.run(selected), exclusive=True)
+        # Push confirmation screen with callback
+        self.push_screen(ConfirmOverlay(), callback=self._on_download_confirmed)
+
+    def _on_download_confirmed(self, confirmed: bool) -> None:
+        """Callback after ConfirmOverlay is dismissed."""
+        if not confirmed:
+            return
+        selected = [b for b in self._catalog_books if b.get("key") in self.selected_keys]
+        self.notify(f"开始下载 {len(selected)} 册...", severity="information")
+        self.pipeline_running = True
+        from chinatxtbook.ui.workers import PipelineWorker
+        worker = PipelineWorker(self)
+        self.run_worker(worker.run(selected), exclusive=True)
 
     def action_show_tasks(self) -> None:
         self.push_screen(TasksScreen())
