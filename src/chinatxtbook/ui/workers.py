@@ -291,6 +291,19 @@ class PipelineWorker:
             app.pipeline_running = False
             return
 
+        # F-07: Disk space check before merge
+        from chinatxtbook.core.downloader import DownloadOrchestrator
+        est_size = sum(b.get("size", 0) for b in prefiltered)
+        peak = DownloadOrchestrator.estimate_peak_space(est_size)
+        import shutil as _shutil, os as _os
+        usage = _shutil.disk_usage(str(OUTPUT_DIR.resolve()) if OUTPUT_DIR.exists()
+                                    else str(OUTPUT_DIR.parent.resolve()))
+        if usage.free < peak:
+            _log(f"DISK FULL: need {peak//(1024**3)}GB, have {usage.free//(1024**3)}GB")
+            self._ui_status(f"ERROR: Disk full — need {peak//(1024**3)}GB free")
+            app.pipeline_running = False
+            return
+
         _log(f"Safety check: {len(prefiltered)}/{total} books passed")
         selected_books = prefiltered
         total = len(selected_books)

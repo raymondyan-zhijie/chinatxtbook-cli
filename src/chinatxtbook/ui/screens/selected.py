@@ -4,7 +4,7 @@ Summary and list of currently selected textbooks.
 """
 
 from textual.app import ComposeResult
-from textual.containers import Vertical
+from textual.containers import Vertical, Horizontal
 from textual.screen import ModalScreen
 from textual.widgets import Static, DataTable, Button
 
