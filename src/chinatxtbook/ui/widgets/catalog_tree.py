@@ -45,6 +45,7 @@ class CatalogTreeWidget(Tree):
             node.add(" ... ", expand=False)
 
         self.root.expand()
+        self.focus()
 
     def _load_children(self, node) -> None:
         """Lazy-load children of a directory node from git tree."""

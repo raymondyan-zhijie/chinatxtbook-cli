@@ -301,10 +301,28 @@ class ChinaTextbookApp(App):
             if not hasattr(self, '_quit_warned') or not self._quit_warned:
                 self._quit_warned = True
                 self.notify("有任务在运行，再次按 Q 强制退出", severity="warning")
-            else:
-                self.exit()
-        else:
-            self.exit()
+                return
+        # Show quit confirmation
+        from textual.screen import ModalScreen
+        from textual.widgets import Static, Button
+        from textual.containers import Vertical
+
+        class QuitScreen(ModalScreen):
+            BINDINGS = [("escape", "dismiss", "返回")]
+            def compose(self):
+                with Vertical():
+                    yield Static("确定退出 ChinaTextbook？", classes="modal-title")
+                    yield Button("退出 (Enter)", variant="error", id="quit-yes")
+                    yield Button("返回 (Esc)", variant="default", id="quit-no")
+            def on_button_pressed(self, event):
+                if event.button.id == "quit-yes":
+                    self.app.exit()
+                else:
+                    self.dismiss()
+            def action_dismiss(self):
+                self.dismiss()
+
+        self.push_screen(QuitScreen())
 
 
 def run_app() -> int:
