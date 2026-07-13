@@ -339,18 +339,26 @@ class PipelineWorker:
             parts = book.get("parts", {})
             pc = book.get("part_count", 1)
 
-            # F-17: Validate output path with PathPolicy
+            # F-17/M-3: Validate output path with PathPolicy
             from chinatxtbook.utils.paths import PathPolicy
 
             safe_of = PathPolicy.safe_write_path(OUTPUT_DIR, f"{rd}/{base}")
             if safe_of is None:
-                _log(f"  PATH REJECTED: {rd}/{base}")
+                _log(f"  PATH REJECTED OUTPUT: {rd}/{base}")
                 fail_count += 1
                 continue
             sd = WORK_DIR / rd
-            od = OUTPUT_DIR / rd
-            od.mkdir(parents=True, exist_ok=True)
-            of = od / base
+            # Validate restore path too
+            for pi in parts.values():
+                fn = pi[0] if isinstance(pi, tuple) else pi
+                safe_src = PathPolicy.resolve_within(WORK_DIR, f"{rd}/{fn}")
+                if safe_src is None:
+                    _log(f"  PATH REJECTED SOURCE: {rd}/{fn}")
+                    fail_count += 1
+                    continue
+            # Write directly to validated safe path
+            of = safe_of
+            od = safe_of.parent
 
             # Check source files
             missing = False

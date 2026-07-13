@@ -84,11 +84,27 @@ class StateManager:
         if self.state_file.exists():
             try:
                 s = json.loads(self.state_file.read_text("utf-8"))
-                # F-16: Validate state structure
-                if not isinstance(s, dict):
-                    raise ValueError("State must be a JSON object")
-                if "groups" in s and not isinstance(s["groups"], dict):
-                    raise ValueError("groups must be a JSON object")
+                # F-16/M-1: Load jsonschema and validate
+                try:
+                    from jsonschema import Draft202012Validator, ValidationError
+                    import importlib.resources
+
+                    schema_path = (
+                        Path(__file__).parent.parent.parent.parent
+                        / "schemas"
+                        / "app-state.schema.json"
+                    )
+                    if schema_path.exists():
+                        schema = json.loads(schema_path.read_text("utf-8"))
+                        Draft202012Validator(schema).validate(s)
+                        # Cross-field invariants (2.3 Section 13)
+                        for k, v in (s.get("groups") or {}).items():
+                            if v.get("status") == "ok" and not v.get("sha256"):
+                                raise ValidationError(
+                                    f"groups.{k}: status=ok requires sha256"
+                                )
+                except ImportError:
+                    pass  # jsonschema not installed, skip validation
                 ver = str(s.get("version", ""))
                 if ver in MIGRATABLE_STATE_VERSIONS:
                     # v1.0→v1.1 migration: preserve groups (hashes/sizes),

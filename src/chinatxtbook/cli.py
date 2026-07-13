@@ -67,11 +67,41 @@ def run_cli(args_list: list = None) -> int:
         ReportGenerator.generate(state)
         return 0
 
-    # F-02/N-3: No unimplemented args were passed, show basic usage
+    if args.list:
+        git = GitClient()
+        if not git.is_repo_valid():
+            print("仓库未初始化。请先运行 TUI 模式克隆仓库：python -m chinatxtbook")
+            return 1
+        tops = args.dirs.split(",") if args.dirs else DEFAULT_TOP_DIRS
+        tops = [t.strip() for t in tops]
+        for top in tops:
+            if git.path_exists_in_tree(top):
+                children = git.ls_tree(f"{top}/") or []
+                print(f"\n【{top}】")
+                for c in children:
+                    print(f"  {c}")
+            else:
+                print(f"\n【{top}】— 不存在")
+        return 0
+
+    # M-2: Reject unimplemented download/merge args with non-zero exit
+    unimplemented = [
+        a for a in [
+            "clean", "dry_run", "update", "reselect", "skip_verify"
+        ] if getattr(args, a, False)
+    ]
+    if unimplemented:
+        print(
+            f"错误: 以下功能在 CLI 模式中不可用: {unimplemented}\n"
+            "请使用 TUI 模式: python -m chinatxtbook\n"
+            "或使用原版 v1.0 脚本: python china_textbook_v1.0.py"
+        )
+        return 2
+
+    # F-02: Show basic usage
     print(
         f"ChinaTextbook CLI v{VERSION}\n"
         "只读功能: --status, --report, --list\n"
-        "完整下载功能请使用 TUI 模式: python -m chinatxtbook\n"
-        "或使用原版 v1.0 脚本: python china_textbook_v1.0.py"
+        "完整下载功能请使用 TUI 模式: python -m chinatxtbook"
     )
     return 0
