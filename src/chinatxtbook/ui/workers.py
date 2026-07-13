@@ -12,9 +12,9 @@ LOG_FILE = Path("pipeline.log")
 
 
 def _log(msg: str):
+    """Write to pipeline log file only (no stdout pollution in TUI)."""
     ts = datetime.now().strftime("%H:%M:%S")
     line = f"[{ts}] {msg}"
-    print(line, flush=True)
     try:
         with open(LOG_FILE, "a", encoding="utf-8") as f:
             f.write(line + "\n")
@@ -382,13 +382,13 @@ class PipelineWorker:
                         "at": datetime.now().isoformat(),
                     }
                 else:
-                    await self._merge(sd, od, base, parts)
-                    _log(f"  OK [{i+1}/{total}]: {base} merged ({of.stat().st_size}B)")
+                    merged_sha = await self._merge(sd, od, base, parts)
+                    _log(f"  OK [{i+1}/{total}]: {base} merged ({of.stat().st_size}B, sha:{merged_sha[:12]})")
                     ok_count += 1
                     # F-04: Persist group record to state
                     app.state.setdefault("groups", {})[group_key] = {
                         "status": "ok", "size": of.stat().st_size,
-                        "sha256": "",  # computed in _merge, stored for future skip
+                        "sha256": merged_sha,
                         "parts": sorted(parts),
                         "at": datetime.now().isoformat(),
                     }
@@ -456,3 +456,4 @@ class PipelineWorker:
             raise IOError("SHA256 mismatch")
 
         os.replace(str(tf), str(of))
+        return h.hexdigest()  # N-4: return computed SHA256

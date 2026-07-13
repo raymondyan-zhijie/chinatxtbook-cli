@@ -71,10 +71,11 @@ def run_cli(args_list: list = None) -> int:
         ReportGenerator.generate(state)
         return 0
 
-    # For now, report that full CLI pipeline is available via the old script
+    # F-02/N-3: No unimplemented args were passed, show basic usage
     print(
         f"ChinaTextbook CLI v{VERSION}\n"
-        "完整 CLI 工作流正在迁移中。当前请使用 --status, --report, --list。\n"
-        "TUI 模式请运行: python -m chinatxtbook"
+        "只读功能: --status, --report, --list\n"
+        "完整下载功能请使用 TUI 模式: python -m chinatxtbook\n"
+        "或使用原版 v1.0 脚本: python china_textbook_v1.0.py"
     )
     return 0
