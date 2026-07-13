@@ -157,6 +157,7 @@ pytest tests/ -v        # 51 tests
 3. **7 层架构未完全实现**: models/ ✅，application/services/workers/ 待建
 4. **无完整任务状态机**: 使用简化版（pending/running/completed）
 5. **无 staging 目录**: 文件直接从 workspace 复制到 output
+6. **首次见到的多卷组无法识别末卷缺失**（继承自 v1.0）：上游仓库不提供文件基准哈希，所有校验仅覆盖本地合并与写入正确性。若某组末卷在本工具首次见到它之前就已被上游删除且剩余不止 1 卷，本地无任何手段检测。能拦截的是中间缺卷（连续性校验）、有历史记录的删卷（历史分卷集合比对）、单卷组（默认拒绝）
 6. **单 PDF 合并**: 使用流式 SHA256 而非 GroupEvaluator 完整路径
 
 ## 后续可改进

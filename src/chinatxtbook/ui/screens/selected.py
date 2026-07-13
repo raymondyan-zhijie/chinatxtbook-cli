@@ -28,8 +28,8 @@ class SelectedScreen(ModalScreen):
             yield DataTable(id="selected-table")
             yield Static("", id="selected-empty", classes="modal-hint")
             with Horizontal():
-            yield Button("开始下载 (F5)", variant="primary", id="selected-download")
-            yield Button("关闭 (Esc)", variant="default", id="selected-close")
+                yield Button("开始下载 (F5)", variant="primary", id="selected-download")
+                yield Button("关闭 (Esc)", variant="default", id="selected-close")
 
     def on_mount(self) -> None:
         table = self.query_one("#selected-table", DataTable)

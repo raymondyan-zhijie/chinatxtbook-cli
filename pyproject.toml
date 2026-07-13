@@ -8,7 +8,7 @@ version = "1.1.0"
 description = "Chinese textbook PDF batch downloader with Textual TUI"
 readme = "README.md"
 license = {text = "MIT"}
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 authors = [
     {name = "raymondyan", email = "raymondyan@gmail.com"},
 ]
@@ -44,8 +44,8 @@ timeout = 300
 
 [tool.ruff]
 line-length = 100
-target-version = "py39"
+target-version = "py310"
 
 [tool.black]
 line-length = 100
-target-version = ["py39"]
+target-version = ["py310"]

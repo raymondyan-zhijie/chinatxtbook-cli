@@ -167,7 +167,8 @@ class PipelineWorker:
                     if r.returncode == 0:
                         dest.write_bytes(r.stdout)
                         break
-                    _log(f"show {git_path[:50]} attempt {attempt+1}: {r.stderr.decode('utf-8','replace')[:80]}")
+                    from chinatxtbook.utils.format import safe_error
+                    _log(f"show {git_path[:50]} attempt {attempt+1}: {safe_error(r.stderr, 80)}")
                     await asyncio.sleep(1)
                 else:
                     failed_paths.append(git_path)

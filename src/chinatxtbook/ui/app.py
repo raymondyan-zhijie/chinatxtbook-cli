@@ -63,6 +63,15 @@ class ChinaTextbookApp(App):
     def on_mount(self) -> None:
         self.title = f"ChinaTextbook v{VERSION}"
         self.sub_title = "📦 正在连接..."
+
+        # F-06: Acquire single-instance lock
+        from chinatxtbook.utils.lockfile import InstanceLock
+        self._lock = InstanceLock()
+        if not self._lock.acquire():
+            self.notify("另一实例正在运行，请关闭后重试", severity="error")
+            self.exit()
+            return
+
         self.git_client = GitClient(work_dir=WORK_DIR, repo_url=GITHUB_REPO)
         self.state = self.state_mgr.load()
         self._check_repo_status()

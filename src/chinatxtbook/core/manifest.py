@@ -55,8 +55,10 @@ class SplitManifest:
         Empty output (no split files) returns empty dict, not None.
         Source: v1.0 lines 804-829.
         """
-        if git_ls_tree_output is None or git_ls_tree_output.strip() == "":
-            return None
+        if git_ls_tree_output is None:
+            return None  # git failure
+        if git_ls_tree_output.strip() == "":
+            return {}    # no split files, not an error
 
         manifest = {}
         for line in git_ls_tree_output.splitlines():

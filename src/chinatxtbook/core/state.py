@@ -129,13 +129,24 @@ class StateManager:
         return self.new_state()
 
     def save(self, state: dict):
-        """Atomically save state to file. Source: v1.0 lines 335-339."""
+        """Atomically save state to file with fsync. Source: v1.0 lines 335-339."""
         state["last_run"] = datetime.now().isoformat()
         tmp = self.state_file.with_suffix(".json.tmp")
-        tmp.write_text(
-            json.dumps(state, ensure_ascii=False, indent=2), "utf-8"
-        )
+        data = json.dumps(state, ensure_ascii=False, indent=2)
+        tmp.write_text(data, "utf-8")
+        # fsync + atomic replace (F-12 fix)
+        with open(tmp, "ab") as f:
+            os.fsync(f.fileno())
         os.replace(tmp, self.state_file)
+        if os.name == "posix":
+            try:
+                dfd = os.open(str(self.state_file.parent), os.O_RDONLY)
+                try:
+                    os.fsync(dfd)
+                finally:
+                    os.close(dfd)
+            except OSError:
+                pass
 
     @staticmethod
     def selection_fingerprint(paths: list[str]) -> str:

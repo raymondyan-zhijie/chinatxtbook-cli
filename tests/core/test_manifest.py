@@ -53,9 +53,14 @@ class TestSplitManifest:
         assert "小学/数学" in manifest
 
     def test_build_manifest_empty(self):
-        # Empty string now returns None (fail-closed: git failure indistinguishable
-        # from empty ls-tree output, so we fail-safe)
+        # Empty string = no split files, returns {} (not None)
+        # None is reserved for actual git failures
         manifest = SplitManifest.build_expected_manifest("", [])
+        assert manifest == {}
+
+    def test_build_manifest_none_input(self):
+        # None = git failure, returns None (fail-closed)
+        manifest = SplitManifest.build_expected_manifest(None, [])
         assert manifest is None
 
     def test_missing_parts(self):
