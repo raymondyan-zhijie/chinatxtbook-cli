@@ -4,7 +4,6 @@ Pure directory tree mirroring the GitHub repository structure exactly.
 Lazy-loaded: children fetched from git on node expand.
 """
 
-
 from textual.widgets import Tree
 
 from chinatxtbook.core.git_client import GitClient
@@ -67,9 +66,9 @@ class CatalogTreeWidget(Tree):
         for entry in entries:
             # entry might be like "小学/语文/统编版" (a dir)
             # or "小学/语文/统编版/file.pdf" (a file)
-            if "/" in entry[len(path)+1:] if entry.startswith(path + "/") else False:
+            if "/" in entry[len(path) + 1 :] if entry.startswith(path + "/") else False:
                 # Has more path components - find the next directory level
-                rel = entry[len(path)+1:] if entry.startswith(path + "/") else entry
+                rel = entry[len(path) + 1 :] if entry.startswith(path + "/") else entry
                 parts = rel.split("/")
                 if len(parts) >= 1:
                     subdirs.add(parts[0])  # Next level directory name
@@ -79,20 +78,19 @@ class CatalogTreeWidget(Tree):
 
         # Use git ls-tree to get direct children
         # KEEP trailing slash so git lists directory contents
-        ok, out, _ = self._git_client.run(
-            ["ls-tree", "HEAD", "--", f"{path}/"], retry=1
-        )
+        ok, out, _ = self._git_client.run(["ls-tree", "HEAD", "--", f"{path}/"], retry=1)
         if not ok:
             return
 
         import re
+
         for line in out.strip().split("\n"):
             line = line.strip()
             if not line:
                 continue
             # git ls-tree output: <mode> <type> <hash>\t<full_path>
             # full_path includes the parent, e.g. "小学/语文"
-            parts = re.split(r'\s+', line, maxsplit=3)
+            parts = re.split(r"\s+", line, maxsplit=3)
             if len(parts) < 4:
                 continue
             _mode, obj_type, _obj_hash, full_name = parts[0], parts[1], parts[2], parts[3]
@@ -132,6 +130,6 @@ class CatalogTreeWidget(Tree):
         if not path:
             return
         app = self.app
-        if hasattr(app, 'show_directory_files'):
+        if hasattr(app, "show_directory_files"):
             app.show_directory_files(path)
         event.stop()

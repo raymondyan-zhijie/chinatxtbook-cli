@@ -20,6 +20,7 @@ def make_book_id(logical_path: str) -> str:
 @dataclass(frozen=True)
 class SourceFile:
     """A single source file in the Git repository. 2.3 Section 6.1."""
+
     git_path: str
     kind: SourceKind
     part_number: Optional[int] = None  # null for complete_pdf, >=1 for split_part
@@ -28,6 +29,7 @@ class SourceFile:
 @dataclass(frozen=True)
 class Book:
     """A single textbook — may be one PDF or multiple split parts. 2.3 Section 6.2."""
+
     book_id: str
     logical_path: str
     title: str

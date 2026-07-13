@@ -47,7 +47,7 @@ class DetailOverlay(ModalScreen):
             "━━ 各分卷详情 ━━",
         ]
 
-        parts = d.get('parts', {})
+        parts = d.get("parts", {})
         if isinstance(parts, dict):
             for idx in sorted(parts):
                 lines.append(f"  卷 {idx}: {parts[idx]}")
@@ -57,7 +57,7 @@ class DetailOverlay(ModalScreen):
         else:
             lines.append("  (无分卷信息)")
 
-        if d.get('sha256'):
+        if d.get("sha256"):
             lines.append(f"\n🔐 SHA256: {d['sha256']}")
 
         content.update("\n".join(lines))

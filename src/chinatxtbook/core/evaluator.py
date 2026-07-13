@@ -96,9 +96,8 @@ class GroupEvaluator:
             extra = [i for i in present_flat if i not in expected]
             if extra:
                 import logging
-                logging.warning(
-                    f"  [{key}] 工作区存在 Git 清单之外的分卷 {extra}，已忽略"
-                )
+
+                logging.warning(f"  [{key}] 工作区存在 Git 清单之外的分卷 {extra}，已忽略")
 
             # ── STALE RECORD HANDLING (v1.0 L1018-1040) ──
             # Stale records retain historical parts set; compare with
@@ -131,6 +130,7 @@ class GroupEvaluator:
                     if deleted:
                         # Output already deleted by user (explicit rebuild)
                         import logging
+
                         logging.warning(
                             f"  [{key}] 上游已删除分卷 {deleted}，"
                             "本地无输出文件需保护，按新清单重建"
@@ -185,9 +185,7 @@ class GroupEvaluator:
                                 rec["parts"] = list(exp_idx)
                             # Cleanup residual parts if --clean
                             cleanup = (
-                                [present_flat[i] for i in sorted(present_flat)]
-                                if clean
-                                else []
+                                [present_flat[i] for i in sorted(present_flat)] if clean else []
                             )
                             return {
                                 "action": "skip",
@@ -198,15 +196,11 @@ class GroupEvaluator:
                     else:
                         return {
                             "action": "skip",
-                            "detail": (
-                                "记录大小一致（--skip-verify 快速跳过，未做哈希核对）"
-                            ),
+                            "detail": ("记录大小一致（--skip-verify 快速跳过，未做哈希核对）"),
                         }
 
             # No trusted record → restore missing parts and re-merge
-            restore = [
-                (Path(rel_dir) / parts_map[i]).as_posix() for i in missing_local
-            ]
+            restore = [(Path(rel_dir) / parts_map[i]).as_posix() for i in missing_local]
             return {
                 "action": "merge",
                 "parts_map": parts_map,

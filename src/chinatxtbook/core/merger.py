@@ -19,6 +19,7 @@ from chinatxtbook.utils.platform import is_interrupted, clear_line, term_width
 
 class InterruptedError(Exception):
     """Raised when user interrupts during hashing/merging."""
+
     pass
 
 
@@ -80,6 +81,7 @@ class ProgressTracker:
             )
             sys_term_width = max(20, term_width() - 1)
             import sys
+
             sys.stdout.write("\r" + line[:sys_term_width])
             sys.stdout.flush()
 
@@ -140,9 +142,7 @@ class PdfMerger:
             # ── Existing output check: hash verification ──
             # Source: v1.0 lines 908-915
             if out_path.exists() and out_path.stat().st_size > 0 and must_verify:
-                expected = sum(
-                    (source_dir / parts_map[i]).stat().st_size for i in parts_map
-                )
+                expected = sum((source_dir / parts_map[i]).stat().st_size for i in parts_map)
                 if out_path.stat().st_size == expected:
                     ph = hash_parts(source_dir, parts_map)
                     oh = hash_file(out_path).hexdigest()

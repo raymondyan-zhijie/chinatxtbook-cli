@@ -26,7 +26,7 @@ class BrowseScreen(Screen):
 
     def action_select_all(self):
         app = self.app
-        if hasattr(app, 'action_select_all'):
+        if hasattr(app, "action_select_all"):
             app.action_select_all()
 
     def compose(self) -> ComposeResult:
@@ -44,7 +44,7 @@ class BrowseScreen(Screen):
         app = self.app
         bar = self.query_one("#status-bar", StatusBarWidget)
 
-        if not hasattr(app, 'git_client') or not app.git_client:
+        if not hasattr(app, "git_client") or not app.git_client:
             bar.update_status("Git client not ready")
             return
         if not app.git_client.is_repo_valid():
@@ -84,6 +84,6 @@ class BrowseScreen(Screen):
             bar.update_status("Catalog empty - check repo state")
 
         bar.update_info(
-            len(getattr(app, 'selected_keys', set())),
-            getattr(app, 'estimated_size', 0),
+            len(getattr(app, "selected_keys", set())),
+            getattr(app, "estimated_size", 0),
         )

@@ -10,6 +10,7 @@ import pytest
 
 # Add src to path
 import sys
+
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 
@@ -91,6 +92,7 @@ def mock_git_client():
 @pytest.fixture
 def create_split_files():
     """Factory fixture that creates test split PDF files."""
+
     def _create(base_dir: Path, rel_dir: str, parts: dict, sizes: list = None):
         """Create split files. parts: {idx: filename}, sizes: list of byte sizes."""
         d = base_dir / rel_dir
@@ -100,4 +102,5 @@ def create_split_files():
             content = b"\x00" * (sizes[i] if sizes else 1024)
             (d / fname).write_bytes(content)
         return d
+
     return _create

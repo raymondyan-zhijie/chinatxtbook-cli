@@ -12,14 +12,15 @@ from textual.binding import Binding
 
 from chinatxtbook.utils.format import fmt_size
 
-
 _CN_NUMS = "零一二三四五六七八九十"
+
 
 def _natural_key(s: str) -> tuple:
     """Natural sort key handling Chinese numerals and Arabic digits."""
     import re
+
     parts = []
-    for chunk in re.split(r'(\d+)', s):
+    for chunk in re.split(r"(\d+)", s):
         if chunk.isdigit():
             parts.append((0, int(chunk)))
         else:
@@ -47,8 +48,8 @@ class BookListWidget(ListView):
         super().__init__(*args, **kwargs)
         self._current_path: str = ""
         # Metadata stored separately: key -> {name, parts, size, ...}
-        self._book_meta: dict = {}       # list_index -> book_data
-        self._all_groups: dict = {}      # key -> book_data
+        self._book_meta: dict = {}  # list_index -> book_data
+        self._all_groups: dict = {}  # key -> book_data
 
     def on_mount(self) -> None:
         self.border_title = "教材列表"
@@ -81,10 +82,11 @@ class BookListWidget(ListView):
                 singles[name] = f
 
         app = self.app
-        selected_keys = getattr(app, 'selected_keys', set()) if app else set()
+        selected_keys = getattr(app, "selected_keys", set()) if app else set()
         # Derive book status from output dir and state groups (per FR-014, UI Gap 9)
         state_groups = (app.state or {}).get("groups", {}) if app else {}
         from chinatxtbook.config import OUTPUT_DIR
+
         output_dir = OUTPUT_DIR
         idx = 0
 
@@ -98,9 +100,13 @@ class BookListWidget(ListView):
             # Derive actual status
             status, _ = self._derive_status(key, base_name, actual_dir, state_groups, output_dir)
             self._all_groups[key] = {
-                "key": key, "name": base_name, "path": actual_dir,
-                "part_count": len(parts), "parts": parts,
-                "size": sz, "status": status,
+                "key": key,
+                "name": base_name,
+                "path": actual_dir,
+                "part_count": len(parts),
+                "parts": parts,
+                "size": sz,
+                "status": status,
             }
             check = "☑" if key in selected_keys else "⬜"
             sz_str = fmt_size(sz) if sz else "?"
@@ -118,9 +124,13 @@ class BookListWidget(ListView):
             sz = size_cache.get(fpath, 0) if size_cache else 0
             status, _ = self._derive_status(key, name, actual_dir, state_groups, output_dir)
             self._all_groups[key] = {
-                "key": key, "name": name, "path": actual_dir,
-                "part_count": 1, "parts": {1: (name, fpath)},
-                "size": sz, "status": status,
+                "key": key,
+                "name": name,
+                "path": actual_dir,
+                "part_count": 1,
+                "parts": {1: (name, fpath)},
+                "size": sz,
+                "status": status,
             }
             check = "☑" if key in selected_keys else "⬜"
             sz_str = fmt_size(sz) if sz else "?"
@@ -153,8 +163,9 @@ class BookListWidget(ListView):
         meta = self._book_meta.get(idx)
         if meta:
             app = self.app
-            if app and hasattr(app, 'push_screen'):
+            if app and hasattr(app, "push_screen"):
                 from chinatxtbook.ui.screens.detail_overlay import DetailOverlay
+
                 app.focused_book = meta
                 app.push_screen(DetailOverlay(book_data=meta))
         event.stop()
@@ -166,7 +177,7 @@ class BookListWidget(ListView):
             return
         key = meta["key"]
         app = self.app
-        if not app or not hasattr(app, 'selected_keys'):
+        if not app or not hasattr(app, "selected_keys"):
             return
 
         # Toggle
@@ -174,18 +185,17 @@ class BookListWidget(ListView):
             app.selected_keys.discard(key)
         else:
             app.selected_keys.add(key)
-            if hasattr(app, 'focused_book'):
+            if hasattr(app, "focused_book"):
                 app.focused_book = meta
 
         # Recalculate
-        if hasattr(app, 'estimated_size'):
+        if hasattr(app, "estimated_size"):
             app.estimated_size = sum(
-                d["size"] for d in self._all_groups.values()
-                if d["key"] in app.selected_keys
+                d["size"] for d in self._all_groups.values() if d["key"] in app.selected_keys
             )
-        if hasattr(app, '_catalog_books'):
+        if hasattr(app, "_catalog_books"):
             app._catalog_books = list(self._all_groups.values())
-        if hasattr(app, '_update_status_bar'):
+        if hasattr(app, "_update_status_bar"):
             app._update_status_bar()
 
         # Refresh label
@@ -228,5 +238,5 @@ class BookListWidget(ListView):
         meta = self._book_meta.get(idx)
         if meta:
             app = self.app
-            if app and hasattr(app, 'focused_book'):
+            if app and hasattr(app, "focused_book"):
                 app.focused_book = meta

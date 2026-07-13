@@ -18,7 +18,8 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - run: pip install -e ".[dev]"
-      - run: ruff check src/ tests/ --ignore F401,F841,F541,F811,E401
+      - run: ruff check src/ tests/
+      - run: black --check src/ tests/
       - run: python -m compileall -q src/
       - run: python -c "from chinatxtbook.ui.app import run_app; print('TUI import OK')"
       - run: pytest tests/ -v --timeout=120

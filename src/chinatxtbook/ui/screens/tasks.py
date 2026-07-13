@@ -2,6 +2,7 @@
 
 Shows active/pending/completed/failed background tasks.
 """
+
 from textual.app import ComposeResult
 from textual.containers import Vertical, Horizontal
 from textual.screen import ModalScreen
@@ -41,7 +42,7 @@ class TasksScreen(ModalScreen):
     def _refresh(self) -> None:
         """Update task list from app state."""
         app = self.app
-        tasks = getattr(app, '_tasks', [])
+        tasks = getattr(app, "_tasks", [])
         table = self.query_one("#task-table", DataTable)
         table.clear()
         empty = self.query_one("#task-empty", Static)
@@ -65,10 +66,12 @@ class TasksScreen(ModalScreen):
             self.dismiss()
         elif event.button.id == "task-cancel":
             app = self.app
-            if app and hasattr(app, 'pipeline_running') and app.pipeline_running:
-                if not getattr(app, '_quit_warned', False):
+            if app and hasattr(app, "pipeline_running") and app.pipeline_running:
+                if not getattr(app, "_quit_warned", False):
                     app._quit_warned = True
-                    self.notify("已请求取消 — 等待当前操作完成（再次按取消强制退出）", severity="warning")
+                    self.notify(
+                        "已请求取消 — 等待当前操作完成（再次按取消强制退出）", severity="warning"
+                    )
                 else:
                     self.notify("强制退出...", severity="error")
                     app.exit()

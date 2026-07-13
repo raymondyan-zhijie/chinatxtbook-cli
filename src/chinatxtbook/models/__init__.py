@@ -3,6 +3,7 @@
 Per design doc 2.3: immutable dataclasses for Book, SourceFile, Task, etc.
 BookId = "bk_" + SHA256(logical_path)[:24] per Section 5.3.
 """
+
 from chinatxtbook.models.book import Book as Book
 from chinatxtbook.models.book import SourceFile as SourceFile
 from chinatxtbook.models.book import SourceKind as SourceKind

@@ -13,7 +13,6 @@ from textual.screen import ModalScreen
 from textual.widgets import Static, Button
 
 
-
 class HelpScreen(ModalScreen):
     """SCR-HELP: Keyboard shortcuts reference, FAQ, and diagnostics.
 
@@ -73,6 +72,7 @@ class HelpScreen(ModalScreen):
         # Git version check
         try:
             import subprocess
+
             r = subprocess.run(["git", "--version"], capture_output=True, text=True)
             lines.append(f"  Git:        {r.stdout.strip()}")
         except Exception:

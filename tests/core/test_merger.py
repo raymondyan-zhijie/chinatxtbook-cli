@@ -36,9 +36,7 @@ class TestPdfMerger:
         """Merge two split parts into one file."""
         parts = self.create_parts(work_dir, "test.pdf", 2, 1024)
 
-        status, size, digest, detail = merger.merge(
-            "testdir", "test.pdf", parts, verify=True
-        )
+        status, size, digest, detail = merger.merge("testdir", "test.pdf", parts, verify=True)
 
         assert status == "ok"
         assert size == 2048
@@ -51,9 +49,7 @@ class TestPdfMerger:
         """Merged output SHA256 should match concatenation of parts."""
         parts = self.create_parts(work_dir, "test.pdf", 3, 1000)
 
-        status, size, digest, detail = merger.merge(
-            "testdir", "test.pdf", parts, verify=True
-        )
+        status, size, digest, detail = merger.merge("testdir", "test.pdf", parts, verify=True)
 
         # Verify by reading and hashing the output
         actual_hash = hash_file(work_dir / "test.pdf").hexdigest()
@@ -70,9 +66,7 @@ class TestPdfMerger:
         assert status1 == "ok"
 
         # Second merge (should skip)
-        status2, size2, digest2, detail2 = merger.merge(
-            "testdir", "test.pdf", parts, verify=True
-        )
+        status2, size2, digest2, detail2 = merger.merge("testdir", "test.pdf", parts, verify=True)
 
         assert status2 == "skipped"
         assert detail2 == "verified"
@@ -89,9 +83,7 @@ class TestPdfMerger:
         # to be shorter than the part files — which requires mocking.
         # For now, verify that normal merge passes.
 
-        status, size, digest, detail = merger.merge(
-            "testdir", "test.pdf", parts, verify=True
-        )
+        status, size, digest, detail = merger.merge("testdir", "test.pdf", parts, verify=True)
         assert status == "ok"
         assert size == 2048
 
@@ -108,9 +100,7 @@ class TestPdfMerger:
         assert not (work_dir / "test.pdf.tmp").exists()
 
         # Output should be the exact sum of parts
-        expected_size = sum(
-            (work_dir / parts[i]).stat().st_size for i in sorted(parts)
-        )
+        expected_size = sum((work_dir / parts[i]).stat().st_size for i in sorted(parts))
         assert (work_dir / "test.pdf").stat().st_size == expected_size
 
     # ── hash_parts utility ──────────────────────────────────

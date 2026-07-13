@@ -66,6 +66,7 @@ class ChinaTextbookApp(App):
 
         # F-06: Acquire single-instance lock
         from chinatxtbook.utils.lockfile import InstanceLock
+
         self._lock = InstanceLock()
         if not self._lock.acquire():
             self.notify("另一实例正在运行，请关闭后重试", severity="error")
@@ -83,6 +84,7 @@ class ChinaTextbookApp(App):
             origin = self.git_client.get_origin_url()
             if origin:
                 from chinatxtbook.config import GITHUB_REPO
+
                 official_base = GITHUB_REPO.rstrip("/").replace(".git", "")
                 actual_base = origin.rstrip("/").replace(".git", "")
                 if official_base != actual_base:
@@ -99,9 +101,9 @@ class ChinaTextbookApp(App):
 
     def _update_status_bar(self) -> None:
         try:
-            if hasattr(self, 'screen') and self.screen:
+            if hasattr(self, "screen") and self.screen:
                 bar = self.screen.query_one("#status-bar")
-                if hasattr(bar, 'update_info'):
+                if hasattr(bar, "update_info"):
                     bar.update_info(len(self.selected_keys), self.estimated_size)
         except Exception:
             pass
@@ -139,8 +141,7 @@ class ChinaTextbookApp(App):
             visible = set(book_list._all_groups.keys())
             self.selected_keys.update(visible)
             self.estimated_size = sum(
-                b.get("size", 0) for b in self._catalog_books
-                if b.get("key") in self.selected_keys
+                b.get("size", 0) for b in self._catalog_books if b.get("key") in self.selected_keys
             )
             self._update_status_bar()
             # Refresh list items to show ☑ checkmarks
@@ -156,8 +157,7 @@ class ChinaTextbookApp(App):
             visible = set(book_list._all_groups.keys())
             self.selected_keys.difference_update(visible)
             self.estimated_size = sum(
-                b.get("size", 0) for b in self._catalog_books
-                if b.get("key") in self.selected_keys
+                b.get("size", 0) for b in self._catalog_books if b.get("key") in self.selected_keys
             )
             self._update_status_bar()
             self._refresh_book_list_checkmarks(book_list)
@@ -172,6 +172,7 @@ class ChinaTextbookApp(App):
         """Refresh checkmark display for all items in the book list."""
         from textual.widgets import Label
         from chinatxtbook.utils.format import fmt_size
+
         for idx, meta in book_list._book_meta.items():
             if idx >= len(book_list.children):
                 continue
@@ -218,6 +219,7 @@ class ChinaTextbookApp(App):
         self.notify(f"开始下载 {len(selected)} 册...", severity="information")
         self.pipeline_running = True
         from chinatxtbook.ui.workers import PipelineWorker
+
         worker = PipelineWorker(self)
         self.run_worker(worker.run(selected), exclusive=True)
 
@@ -254,11 +256,13 @@ class ChinaTextbookApp(App):
         name = self.focused_book.get("name", "")
         path = self.focused_book.get("path", "")
         from chinatxtbook.config import OUTPUT_DIR
+
         fp = OUTPUT_DIR / path / name
         if fp.exists():
             import os
             import subprocess
             import sys
+
             try:
                 if sys.platform == "win32":
                     os.startfile(str(fp))
@@ -278,6 +282,7 @@ class ChinaTextbookApp(App):
         import os
         import sys
         import subprocess
+
         fp = OUTPUT_DIR / (self.focused_book.get("path", "") if self.focused_book else "")
         fp.mkdir(parents=True, exist_ok=True)
         try:
@@ -299,11 +304,13 @@ class ChinaTextbookApp(App):
         name = self.focused_book.get("name", "")
         path = self.focused_book.get("path", "")
         from chinatxtbook.config import OUTPUT_DIR
+
         fp = OUTPUT_DIR / path / name
         if not fp.exists():
             self.notify("文件未下载，无法验证", severity="warning")
             return
         import hashlib
+
         h = hashlib.sha256()
         with open(fp, "rb") as f:
             while True:
@@ -317,7 +324,7 @@ class ChinaTextbookApp(App):
 
     def action_quit_app(self) -> None:
         if self.pipeline_running:
-            if not hasattr(self, '_quit_warned') or not self._quit_warned:
+            if not hasattr(self, "_quit_warned") or not self._quit_warned:
                 self._quit_warned = True
                 self.notify("有任务在运行，再次按 Q 强制退出", severity="warning")
                 return
@@ -328,16 +335,19 @@ class ChinaTextbookApp(App):
 
         class QuitScreen(ModalScreen):
             BINDINGS = [("escape", "dismiss", "返回")]
+
             def compose(self):
                 with Vertical():
                     yield Static("确定退出 ChinaTextbook？", classes="modal-title")
                     yield Button("退出 (Enter)", variant="error", id="quit-yes")
                     yield Button("返回 (Esc)", variant="default", id="quit-no")
+
             def on_button_pressed(self, event):
                 if event.button.id == "quit-yes":
                     self.app.exit()
                 else:
                     self.dismiss()
+
             def action_dismiss(self):
                 self.dismiss()
 

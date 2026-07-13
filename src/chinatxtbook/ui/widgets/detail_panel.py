@@ -26,7 +26,7 @@ class DetailPanelWidget(Container):
     def _refresh_from_app(self) -> None:
         """Read focused_book from app and update display."""
         app = self.app
-        if not hasattr(app, 'focused_book') or not app.focused_book:
+        if not hasattr(app, "focused_book") or not app.focused_book:
             return
 
         book = app.focused_book

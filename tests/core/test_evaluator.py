@@ -3,7 +3,6 @@
 Covers all branches from v1.0 evaluate_group().
 """
 
-
 import pytest
 
 from chinatxtbook.core.evaluator import GroupEvaluator
@@ -43,15 +42,19 @@ class TestGroupEvaluator:
 
         # Add record
         state.setdefault("groups", {})["dir/test.pdf"] = {
-            "status": "ok", "size": 2048, "sha256": "x" * 64,
-            "parts": [1, 2], "at": "2026-01-01T00:00:00",
+            "status": "ok",
+            "size": 2048,
+            "sha256": "x" * 64,
+            "parts": [1, 2],
+            "at": "2026-01-01T00:00:00",
         }
 
         present = {1: ["test.pdf.1"], 2: ["test.pdf.2"]}
         expected = {1: "test.pdf.1", 2: "test.pdf.2"}
 
-        result = evaluator.evaluate(state, "dir", "test.pdf", present, expected,
-                                     verify=False)  # skip-verify
+        result = evaluator.evaluate(
+            state, "dir", "test.pdf", present, expected, verify=False
+        )  # skip-verify
 
         assert result["action"] == "skip"
         assert "快速跳过" in result["detail"]
@@ -125,8 +128,12 @@ class TestGroupEvaluator:
         out.write_bytes(b"\x00" * 3072)
 
         state.setdefault("groups", {})["dir/test.pdf"] = {
-            "status": "ok", "size": 3072, "sha256": "y" * 64,
-            "parts": [1, 2, 3], "stale": True, "at": "2026-01-01T00:00:00",
+            "status": "ok",
+            "size": 3072,
+            "sha256": "y" * 64,
+            "parts": [1, 2, 3],
+            "stale": True,
+            "at": "2026-01-01T00:00:00",
         }
 
         present = {1: ["test.pdf.1"], 2: ["test.pdf.2"]}
@@ -144,16 +151,19 @@ class TestGroupEvaluator:
         out.write_bytes(b"\x00" * 2048)
 
         state.setdefault("groups", {})["dir/test.pdf"] = {
-            "status": "ok", "size": 2048, "sha256": "z" * 64,
-            "parts": [1, 2], "stale": True, "at": "2026-01-01T00:00:00",
+            "status": "ok",
+            "size": 2048,
+            "sha256": "z" * 64,
+            "parts": [1, 2],
+            "stale": True,
+            "at": "2026-01-01T00:00:00",
         }
 
         present = {1: ["test.pdf.1"], 2: ["test.pdf.2"]}
         expected = {1: "test.pdf.1", 2: "test.pdf.2"}
 
         # Even with --skip-verify, stale record should NOT skip
-        result = evaluator.evaluate(state, "dir", "test.pdf", present, expected,
-                                     verify=False)
+        result = evaluator.evaluate(state, "dir", "test.pdf", present, expected, verify=False)
 
         # Should merge (not skip), because stale records cannot be used
         # as skip evidence, and all parts are present
@@ -166,8 +176,11 @@ class TestGroupEvaluator:
         out.write_bytes(b"\x00" * 2048)
 
         state.setdefault("groups", {})["dir/test.pdf"] = {
-            "status": "ok", "size": 2048, "sha256": "w" * 64,
-            "stale": True, "at": "2026-01-01T00:00:00",
+            "status": "ok",
+            "size": 2048,
+            "sha256": "w" * 64,
+            "stale": True,
+            "at": "2026-01-01T00:00:00",
             # NOTE: no "parts" field (old v4.2/v4.3 record)
         }
 
@@ -190,11 +203,15 @@ class TestGroupEvaluator:
 
         # Pre-compute what the hash would be with this content
         import hashlib
+
         actual_hash = hashlib.sha256(b"\x00" * 2048).hexdigest()
 
         state.setdefault("groups", {})["dir/test.pdf"] = {
-            "status": "ok", "size": 2048, "sha256": actual_hash,
-            "parts": [1, 2], "at": "2026-01-01T00:00:00",
+            "status": "ok",
+            "size": 2048,
+            "sha256": actual_hash,
+            "parts": [1, 2],
+            "at": "2026-01-01T00:00:00",
         }
 
         present = {}  # All parts cleaned

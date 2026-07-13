@@ -95,13 +95,9 @@ class ReportGenerator:
             lines.append("\n## 已合并 PDF（当前选择内）\n")
             for key in sorted(groups):
                 g = groups[key]
-                sha = (
-                    f" sha256:{g['sha256'][:16]}…" if g.get("sha256") else ""
-                )
+                sha = f" sha256:{g['sha256'][:16]}…" if g.get("sha256") else ""
                 stale = " 【过期，待重新核对】" if g.get("stale") else ""
-                lines.append(
-                    f"- `{key}` ({fmt_size(g.get('size'))}{sha}){stale}"
-                )
+                lines.append(f"- `{key}` ({fmt_size(g.get('size'))}{sha}){stale}")
 
         lines.append(
             "\n> 说明: 校验为输出内容重读一致性校验（SHA256），"

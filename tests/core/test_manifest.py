@@ -1,7 +1,5 @@
 """Tests for SplitManifest."""
 
-
-
 from chinatxtbook.core.manifest import SplitManifest, SPLIT_RE
 
 
@@ -45,7 +43,9 @@ class TestSplitManifest:
         assert "小学/语文" in manifest
         assert "test.pdf" in manifest["小学/语文"]
         assert manifest["小学/语文"]["test.pdf"] == {
-            1: "test.pdf.1", 2: "test.pdf.2", 3: "test.pdf.3"
+            1: "test.pdf.1",
+            2: "test.pdf.2",
+            3: "test.pdf.3",
         }
         assert "other.pdf" in manifest["小学/语文"]
         assert "小学/数学" in manifest

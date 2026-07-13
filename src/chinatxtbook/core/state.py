@@ -113,9 +113,8 @@ class StateManager:
                     )
                     shutil.copy(self.state_file, backup)
                     import logging
-                    logging.warning(
-                        f"不兼容的旧版本状态文件，已备份为 {backup.name}，重新开始"
-                    )
+
+                    logging.warning(f"不兼容的旧版本状态文件，已备份为 {backup.name}，重新开始")
                     return self.new_state()
                 base = self.new_state()
                 base.update(s)
@@ -123,6 +122,7 @@ class StateManager:
                 return base
             except Exception:
                 import logging
+
                 logging.warning("状态文件损坏，重新开始")
         return self.new_state()
 
@@ -151,9 +151,7 @@ class StateManager:
         """Generate a hash fingerprint for a set of selected paths.
         Source: v1.0 lines 341-342.
         """
-        return hashlib.sha256(
-            "\n".join(sorted(paths)).encode("utf-8")
-        ).hexdigest()
+        return hashlib.sha256("\n".join(sorted(paths)).encode("utf-8")).hexdigest()
 
     def invalidate_by_diff(
         self, state: dict, work_dir: Path, old: Optional[str], new: Optional[str]
@@ -177,11 +175,7 @@ class StateManager:
                         continue
                     name = os.path.basename(p)
                     m = SPLIT_RE.match(name)
-                    key = (
-                        (Path(p).parent / m.group(1)).as_posix()
-                        if m
-                        else Path(p).as_posix()
-                    )
+                    key = (Path(p).parent / m.group(1)).as_posix() if m else Path(p).as_posix()
                     if key in groups and not groups[key].get("stale"):
                         groups[key]["stale"] = True
                         invalidated += 1
@@ -196,6 +190,7 @@ class StateManager:
     def _git_diff(work_dir: Path, old: str, new: str):
         """Run git diff --name-only. Source: v1.0 line 439."""
         import subprocess
+
         try:
             r = subprocess.run(
                 ["git", "diff", "--name-only", old, new],
@@ -223,8 +218,4 @@ def groups_in_selection(state: dict) -> dict:
     groups = state.get("groups", {})
     if not sels:
         return {}
-    return {
-        k: v
-        for k, v in groups.items()
-        if any(k == s or k.startswith(s + "/") for s in sels)
-    }
+    return {k: v for k, v in groups.items() if any(k == s or k.startswith(s + "/") for s in sels)}

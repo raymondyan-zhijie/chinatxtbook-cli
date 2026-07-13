@@ -42,6 +42,6 @@ def fmt_size(n) -> str:
     """
     if n is None:
         return "大小未知"
-    if n >= 1024 ** 3:
+    if n >= 1024**3:
         return f"{n / 1024 ** 3:.2f} GB"
     return f"{n / 1024 ** 2:.1f} MB"

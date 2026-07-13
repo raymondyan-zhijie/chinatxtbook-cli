@@ -7,7 +7,9 @@ import argparse
 
 from chinatxtbook import VERSION
 from chinatxtbook.config import (
-    DEFAULT_TOP_DIRS, DEFAULT_WORKERS, MAX_WORKERS,
+    DEFAULT_TOP_DIRS,
+    DEFAULT_WORKERS,
+    MAX_WORKERS,
 )
 from chinatxtbook.core.git_client import GitClient
 from chinatxtbook.core.state import StateManager
@@ -23,28 +25,21 @@ def run_cli(args_list: list = None) -> int:
     """
     setup_console()
 
-    parser = argparse.ArgumentParser(
-        description=f"ChinaTextbook CLI v{VERSION}"
-    )
+    parser = argparse.ArgumentParser(description=f"ChinaTextbook CLI v{VERSION}")
     parser.add_argument("--status", action="store_true", help="查看当前状态")
-    parser.add_argument("--clean", action="store_true",
-                        help="合并且哈希验证通过后删除分卷文件")
-    parser.add_argument("--dry-run", action="store_true",
-                        help="预览核对结果，不执行")
-    parser.add_argument("--update", action="store_true",
-                        help="拉取上游更新并增量处理")
-    parser.add_argument("--reselect", action="store_true",
-                        help="重新选择下载目录")
-    parser.add_argument("--list", action="store_true",
-                        help="仅列出目录树与大小，不下载")
-    parser.add_argument("--dirs", metavar="A,B",
-                        help=f"自定义顶层目录（默认: {','.join(DEFAULT_TOP_DIRS)}）")
-    parser.add_argument("--workers", type=int, default=DEFAULT_WORKERS,
-                        help=f"并发线程数 1-{MAX_WORKERS}")
-    parser.add_argument("--skip-verify", action="store_true",
-                        help="跳过重读一致性校验")
-    parser.add_argument("--report", action="store_true",
-                        help="生成运行报告")
+    parser.add_argument("--clean", action="store_true", help="合并且哈希验证通过后删除分卷文件")
+    parser.add_argument("--dry-run", action="store_true", help="预览核对结果，不执行")
+    parser.add_argument("--update", action="store_true", help="拉取上游更新并增量处理")
+    parser.add_argument("--reselect", action="store_true", help="重新选择下载目录")
+    parser.add_argument("--list", action="store_true", help="仅列出目录树与大小，不下载")
+    parser.add_argument(
+        "--dirs", metavar="A,B", help=f"自定义顶层目录（默认: {','.join(DEFAULT_TOP_DIRS)}）"
+    )
+    parser.add_argument(
+        "--workers", type=int, default=DEFAULT_WORKERS, help=f"并发线程数 1-{MAX_WORKERS}"
+    )
+    parser.add_argument("--skip-verify", action="store_true", help="跳过重读一致性校验")
+    parser.add_argument("--report", action="store_true", help="生成运行报告")
     parser.add_argument("--version", action="version", version=f"v{VERSION}")
 
     args = parser.parse_args(args_list)
@@ -52,7 +47,8 @@ def run_cli(args_list: list = None) -> int:
     min(max(1, args.workers), MAX_WORKERS)
     (
         [d.strip() for d in args.dirs.replace("，", ",").split(",") if d.strip()]
-        if args.dirs else DEFAULT_TOP_DIRS
+        if args.dirs
+        else DEFAULT_TOP_DIRS
     )
 
     state_mgr = StateManager()

@@ -5,8 +5,9 @@ from chinatxtbook.utils.format import redact_url, safe_error, fmt_size
 
 class TestRedactUrl:
     def test_redact_username_password(self):
-        assert redact_url("https://user:pass@github.com/repo.git") == \
-            "https://***@github.com/repo.git"
+        assert (
+            redact_url("https://user:pass@github.com/repo.git") == "https://***@github.com/repo.git"
+        )
 
     def test_redact_access_token(self):
         result = redact_url("https://github.com/repo?access_token=secret123")
@@ -60,7 +61,7 @@ class TestFmtSize:
         assert "MB" in fmt_size(1048576)
 
     def test_fmt_size_gb(self):
-        result = fmt_size(5 * 1024 ** 3)
+        result = fmt_size(5 * 1024**3)
         assert "GB" in result
         assert "5.00" in result
 

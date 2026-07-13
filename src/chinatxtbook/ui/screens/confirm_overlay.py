@@ -33,20 +33,21 @@ class ConfirmOverlay(ModalScreen):
 
     def on_mount(self) -> None:
         app = self.app
-        selected = getattr(app, 'selected_keys', set())
-        books = getattr(app, '_catalog_books', [])
+        selected = getattr(app, "selected_keys", set())
+        books = getattr(app, "_catalog_books", [])
 
         total_books = len(selected)
         total_files = 0
         total_size = 0
         for b in books:
-            if b.get('key') in selected:
-                total_files += b.get('part_count', 1)
-                total_size += b.get('size', 0)
+            if b.get("key") in selected:
+                total_files += b.get("part_count", 1)
+                total_size += b.get("size", 0)
 
         # Check disk space
         import shutil
         import os
+
         usage = shutil.disk_usage(os.getcwd())
         free_gb = usage.free / (1024**3)
         peak = int(total_size * 3.2) + 2 * 1024**3

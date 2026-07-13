@@ -27,8 +27,9 @@ class SearchOverlay(ModalScreen):
 
     def compose(self) -> ComposeResult:
         with Vertical(id="search-overlay"):
-            yield Static("🔍 搜索 — 输入关键词，Space选择，Enter定位，Esc关闭",
-                         classes="search-hint")
+            yield Static(
+                "🔍 搜索 — 输入关键词，Space选择，Enter定位，Esc关闭", classes="search-hint"
+            )
             yield Input(placeholder="输入教材名称、科目或年级...", id="search-input")
             yield ListView(id="search-results-list")
             yield Static("", id="search-status")
@@ -52,9 +53,11 @@ class SearchOverlay(ModalScreen):
         app = self.app
         keywords = query.lower().split()
         self._matches = []
-        for book in getattr(app, '_catalog_books', []):
-            text = (f"{book.get('stage','')} {book.get('subject','')} "
-                    f"{book.get('name','')} {book.get('key','')}").lower()
+        for book in getattr(app, "_catalog_books", []):
+            text = (
+                f"{book.get('stage','')} {book.get('subject','')} "
+                f"{book.get('name','')} {book.get('key','')}"
+            ).lower()
             if all(kw in text for kw in keywords):
                 self._matches.append(book)
                 if len(self._matches) >= 50:
@@ -66,7 +69,7 @@ class SearchOverlay(ModalScreen):
                 path = f"{book.get('stage','')}/{book.get('subject','')}"
                 sz = fmt_size(book.get("size", 0)) if book.get("size") else "?"
                 key = book.get("key", "")
-                check = "☑" if key in getattr(app, 'selected_keys', set()) else "⬜"
+                check = "☑" if key in getattr(app, "selected_keys", set()) else "⬜"
                 label = f"{check} {name}  [{path}]  {sz}"
                 results.append(ListItem(Label(label)))
             status.update(f"找到 {len(self._matches)} 个匹配 — Space选择 Enter定位")
@@ -81,11 +84,11 @@ class SearchOverlay(ModalScreen):
             if idx < len(self._matches):
                 book = self._matches[idx]
                 app = self.app
-                if hasattr(app, 'focused_book'):
+                if hasattr(app, "focused_book"):
                     app.focused_book = book
                 # Load the book's directory into the center panel
                 path = book.get("path", "")
-                if path and hasattr(app, 'show_directory_files'):
+                if path and hasattr(app, "show_directory_files"):
                     app.show_directory_files(path)
                 app.notify(f"已定位: {book.get('name','')[:40]}")
         self.dismiss()

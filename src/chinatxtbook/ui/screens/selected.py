@@ -45,7 +45,7 @@ class SelectedScreen(ModalScreen):
         empty = self.query_one("#selected-empty", Static)
         summary = self.query_one("#selected-summary", Static)
 
-        selected = getattr(app, 'selected_keys', set())
+        selected = getattr(app, "selected_keys", set())
         if not selected:
             empty.update("未选择任何教材\n\n在左侧目录树中使用 Space 键选择")
             summary.update("")
@@ -53,18 +53,17 @@ class SelectedScreen(ModalScreen):
 
         empty.update("")
         # Gather book metadata from catalog data
-        books = getattr(app, '_catalog_books', [])
+        books = getattr(app, "_catalog_books", [])
         total_size = 0
         count = 0
         for b in books:
-            if b.get('key') in selected:
+            if b.get("key") in selected:
                 count += 1
-                total_size += b.get('size', 0)
-                sz_str = fmt_size(b.get('size', 0))
+                total_size += b.get("size", 0)
+                sz_str = fmt_size(b.get("size", 0))
                 parts_str = f"{b.get('part_count', '?')}卷"
                 icon = "☑"
-                table.add_row(icon, b.get('name', '?'), parts_str,
-                              sz_str, "待下载")
+                table.add_row(icon, b.get("name", "?"), parts_str, sz_str, "待下载")
 
         summary.update(f"共 {count} 册教材 │ 预估 {fmt_size(total_size)}")
 
@@ -74,7 +73,7 @@ class SelectedScreen(ModalScreen):
         elif event.button.id == "selected-download":
             self.dismiss()
             app = self.app
-            if hasattr(app, 'action_confirm_download'):
+            if hasattr(app, "action_confirm_download"):
                 app.action_confirm_download()
 
     def action_dismiss(self) -> None:

@@ -32,8 +32,14 @@ class LogsScreen(ModalScreen):
         log_view.write("[cyan]ChinaTextbook 运行日志[/cyan]")
         log_view.write("─" * 40)
         for level, msg in self._log_entries:
-            color = {"INFO": "", "WARN": "yellow", "ERROR": "red",
-                     "OK": "green", "STEP": "cyan", "DATA": ""}.get(level, "")
+            color = {
+                "INFO": "",
+                "WARN": "yellow",
+                "ERROR": "red",
+                "OK": "green",
+                "STEP": "cyan",
+                "DATA": "",
+            }.get(level, "")
             if color:
                 log_view.write(f"[{color}][{level}] {msg}[/{color}]")
             else:
@@ -53,6 +59,7 @@ class LogsScreen(ModalScreen):
             try:
                 import subprocess
                 import sys
+
                 if sys.platform == "win32":
                     subprocess.run(["clip"], input=text, text=True, shell=True)
                 else:
@@ -65,6 +72,7 @@ class LogsScreen(ModalScreen):
             import sys
             import platform
             import shutil
+
             fn = f"diagnostic_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
             lines = [
                 "ChinaTextbook Diagnostic Report",

@@ -25,8 +25,10 @@ class TestStateManager:
         s = state_mgr.new_state()
         s["clone_done"] = True
         s["groups"]["test/key"] = {
-            "status": "ok", "size": 1024,
-            "sha256": "a" * 64, "parts": [1, 2],
+            "status": "ok",
+            "size": 1024,
+            "sha256": "a" * 64,
+            "parts": [1, 2],
             "at": datetime.now().isoformat(),
         }
         state_mgr.save(s)

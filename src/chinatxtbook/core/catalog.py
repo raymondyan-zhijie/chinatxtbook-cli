@@ -18,23 +18,25 @@ from chinatxtbook.core.git_client import GitClient
 @dataclass
 class BookEntry:
     """A single textbook (leaf node in the catalog tree)."""
-    key: str                    # POSIX path like "小学/语文/人教版/一年级/语文上.pdf"
-    name: str                   # Display name
-    stage: str                  # 学段
-    subject: str                # 科目
-    grade: str                  # 年级/册次
-    part_count: int = 0         # Number of split parts
-    total_size: int = 0         # Total bytes from size cache
-    is_selected: bool = False   # UI selection state
+
+    key: str  # POSIX path like "小学/语文/人教版/一年级/语文上.pdf"
+    name: str  # Display name
+    stage: str  # 学段
+    subject: str  # 科目
+    grade: str  # 年级/册次
+    part_count: int = 0  # Number of split parts
+    total_size: int = 0  # Total bytes from size cache
+    is_selected: bool = False  # UI selection state
 
 
 @dataclass
 class CatalogNode:
     """A node in the bibliographic hierarchy."""
+
     name: str
     display_name: str
-    path: str                   # POSIX path in repo
-    level: str                  # "stage" | "subject" | "grade" | "book"
+    path: str  # POSIX path in repo
+    level: str  # "stage" | "subject" | "grade" | "book"
     children: list = field(default_factory=list)
     size_bytes: int = 0
     book_count: int = 0
@@ -49,8 +51,12 @@ class CatalogBuilder:
     """
 
     STAGE_ORDER = [
-        "小学", "初中", "高中", "大学",
-        "小学（五•四学制）", "初中（五•四学制）",
+        "小学",
+        "初中",
+        "高中",
+        "大学",
+        "小学（五•四学制）",
+        "初中（五•四学制）",
     ]
 
     def __init__(self, git_client: GitClient):
@@ -176,8 +182,7 @@ class CatalogBuilder:
 
                 books[base] = BookEntry(
                     key=f"{rel_dir}/{base}",
-                    name=f"{os.path.basename(rel_dir)}/{base}"
-                    if len(parts) > 2 else base,
+                    name=f"{os.path.basename(rel_dir)}/{base}" if len(parts) > 2 else base,
                     stage=st,
                     subject=sub,
                     grade=grd,

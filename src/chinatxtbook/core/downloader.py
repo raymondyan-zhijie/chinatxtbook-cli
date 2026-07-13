@@ -95,8 +95,7 @@ class DownloadOrchestrator:
             sz = sum(f.stat().st_size for f in files)
             if tree_files and not files:
                 self.log(
-                    f"  {p.rstrip('/')}: 目录为空但 Git 树中有"
-                    f" {len(tree_files)} 个文件",
+                    f"  {p.rstrip('/')}: 目录为空但 Git 树中有" f" {len(tree_files)} 个文件",
                     "ERROR",
                 )
                 all_ok = False
@@ -119,9 +118,7 @@ class DownloadOrchestrator:
     def scan(self, state: dict, force: bool = False) -> bool:
         """Scan for split PDF groups. Source: v1.0 lines 1255-1296."""
         if state.get("target_dirs") and not force:
-            self.log(
-                f"已知 {len(state['target_dirs'])} 个含分卷的目录", "OK"
-            )
+            self.log(f"已知 {len(state['target_dirs'])} 个含分卷的目录", "OK")
             return True
 
         self.log("━━━ STEP 3: 扫描分卷 PDF ━━━", "STEP")
@@ -160,6 +157,7 @@ class DownloadOrchestrator:
                 if ".git" in f.parts:
                     continue
                 from chinatxtbook.core.manifest import SPLIT_RE
+
                 if f.is_file() and SPLIT_RE.match(f.name):
                     rel = f.parent.relative_to(WORK_DIR).as_posix()
                     if rel not in manifest:
@@ -178,9 +176,7 @@ class DownloadOrchestrator:
             self.log("未发现分卷文件", "WARN")
         else:
             n_groups = sum(len(v) for v in manifest.values())
-            self.log(
-                f"发现 {len(dirs)} 个目录（Git 清单 {n_groups} 组分卷）", "OK"
-            )
+            self.log(f"发现 {len(dirs)} 个目录（Git 清单 {n_groups} 组分卷）", "OK")
         return True
 
     # ── Restore missing ─────────────────────────────────────────
@@ -229,8 +225,7 @@ class DownloadOrchestrator:
                 except OSError:
                     sz = 0
                 need_restore = [
-                    n for n in parts_map.values()
-                    if not (WORK_DIR / rel_dir / n).exists()
+                    n for n in parts_map.values() if not (WORK_DIR / rel_dir / n).exists()
                 ]
                 flag = f"  [需恢复 {len(need_restore)} 卷]" if need_restore else ""
                 self.log(f"    {key}  ({len(parts_map)} 卷, {fmt_size(sz)}){flag}")
@@ -253,9 +248,7 @@ class DownloadOrchestrator:
                         p.unlink(missing_ok=True)
                         n_removed += 1
             if n_removed:
-                self.log(
-                    f"已清理哈希核对通过的跳过组残余分卷 {n_removed} 个", "OK"
-                )
+                self.log(f"已清理哈希核对通过的跳过组残余分卷 {n_removed} 个", "OK")
 
         # Skip summary
         n_size = sum(1 for d in skips.values() if "快速跳过" in d)
@@ -289,10 +282,7 @@ class DownloadOrchestrator:
                 if p.exists():
                     total_bytes += p.stat().st_size
 
-        verify_label = (
-            "ON" if verify
-            else ("ON (--clean 强制)" if clean else "OFF")
-        )
+        verify_label = "ON" if verify else ("ON (--clean 强制)" if clean else "OFF")
         self.log(
             f"并发线程: {workers} | 重读一致性校验: {verify_label} | "
             f"待合并 {len(plans)} 组: {fmt_size(total_bytes)}"
@@ -307,13 +297,15 @@ class DownloadOrchestrator:
 
         def task(rel_dir, base, parts_map):
             status, size, digest, detail = self.merger.merge(
-                rel_dir, base, parts_map,
-                verify=verify, clean_intent=clean, progress=progress,
+                rel_dir,
+                base,
+                parts_map,
+                verify=verify,
+                clean_intent=clean,
+                progress=progress,
                 output_dir=output_dir / rel_dir if output_dir else None,
             )
-            if clean and (
-                status == "ok" or (status == "skipped" and detail == "verified")
-            ):
+            if clean and (status == "ok" or (status == "skipped" and detail == "verified")):
                 for n in parts_map.values():
                     (WORK_DIR / rel_dir / n).unlink(missing_ok=True)
             return status, size, digest, detail
@@ -364,13 +356,9 @@ class DownloadOrchestrator:
                             ok_count += 1
                             elapsed = time.time() - t0
                             speed = progress.done / elapsed if elapsed > 0 else 0
-                            eta = (
-                                (total_bytes - progress.done) / speed
-                                if speed > 0 else 0
-                            )
+                            eta = (total_bytes - progress.done) / speed if speed > 0 else 0
                             eta_str = (
-                                f"{int(eta // 60)}m{int(eta % 60)}s"
-                                if eta > 60 else f"{eta:.0f}s"
+                                f"{int(eta // 60)}m{int(eta % 60)}s" if eta > 60 else f"{eta:.0f}s"
                             )
                             self.log(
                                 f"[{done}/{len(plans)}] {key} → OK {fmt_size(size)} | "
@@ -393,8 +381,7 @@ class DownloadOrchestrator:
         total_fail = fail_count + len(errors)
         self.log("━" * 55, "STEP")
         self.log(
-            f"合并完成: {ok_count} 成功 / {total_fail} 失败 / "
-            f"{skip_count + len(skips)} 跳过",
+            f"合并完成: {ok_count} 成功 / {total_fail} 失败 / " f"{skip_count + len(skips)} 跳过",
             "OK",
         )
         if total_fail:
@@ -448,4 +435,4 @@ class DownloadOrchestrator:
     @staticmethod
     def estimate_peak_space(est_bytes: int) -> int:
         """Peak disk usage formula. Source: v1.0 line 1180."""
-        return int(est_bytes * 3.2) + 2 * 1024 ** 3
+        return int(est_bytes * 3.2) + 2 * 1024**3

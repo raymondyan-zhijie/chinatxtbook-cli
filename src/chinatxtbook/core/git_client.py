@@ -153,16 +153,12 @@ class GitClient:
             return state["default_branch"]
 
         branch = None
-        ok, out, _ = self.run(
-            ["symbolic-ref", "--short", "refs/remotes/origin/HEAD"], retry=1
-        )
+        ok, out, _ = self.run(["symbolic-ref", "--short", "refs/remotes/origin/HEAD"], retry=1)
         if ok and "/" in out.strip():
             branch = out.strip().split("/", 1)[1]
         if not branch:
             for cand in ("master", "main"):
-                ok, _, _ = self.run(
-                    ["rev-parse", "--verify", "--quiet", f"origin/{cand}"], retry=1
-                )
+                ok, _, _ = self.run(["rev-parse", "--verify", "--quiet", f"origin/{cand}"], retry=1)
                 if ok:
                     branch = cand
                     break
@@ -224,9 +220,7 @@ class GitClient:
             self.log(f"sparse-checkout set 失败: {safe_error(err)}", "ERROR")
             return False
 
-        ok, _, err = self.run(
-            ["sparse-checkout", "reapply"], retry=1, allow_fetch=True
-        )
+        ok, _, err = self.run(["sparse-checkout", "reapply"], retry=1, allow_fetch=True)
         if not ok:
             self.log(f"sparse-checkout reapply 失败: {safe_error(err)}", "ERROR")
             return False
@@ -234,9 +228,7 @@ class GitClient:
 
     def checkout(self, branch: str) -> bool:
         """Checkout branch (downloads selected files). Source: v1.0 lines 1217-1221."""
-        self.log(
-            f"  git checkout {branch}（下载选定文件，体积大时请耐心等待）...", "DATA"
-        )
+        self.log(f"  git checkout {branch}（下载选定文件，体积大时请耐心等待）...", "DATA")
         ok, _, err = self.run(["checkout", branch], allow_fetch=True)
         if not ok:
             self.log(f"checkout 失败: {safe_error(err)}", "ERROR")
@@ -245,9 +237,7 @@ class GitClient:
 
     def restore_files(self, file_paths: list[str]) -> bool:
         """Restore missing files from git. Source: v1.0 lines 1324-1337."""
-        self.log(
-            f"检测到 {len(file_paths)} 个文件需从仓库恢复...", "WARN"
-        )
+        self.log(f"检测到 {len(file_paths)} 个文件需从仓库恢复...", "WARN")
         ok_all = True
         for i in range(0, len(file_paths), 50):
             batch = file_paths[i : i + 50]
@@ -274,9 +264,7 @@ class GitClient:
 
     def merge_ff(self, branch: str) -> bool:
         """Fast-forward merge. Source: v1.0 lines 1507-1510."""
-        ok, _, err = self.run(
-            ["merge", "--ff-only", f"origin/{branch}"], allow_fetch=True
-        )
+        ok, _, err = self.run(["merge", "--ff-only", f"origin/{branch}"], allow_fetch=True)
         if not ok:
             self.log(f"更新失败: {safe_error(err)}", "ERROR")
             return False
@@ -302,10 +290,7 @@ class GitClient:
             return None, None, False
 
         owner, name = m.groups()
-        api = (
-            f"https://api.github.com/repos/{owner}/{name}/git/trees/{ref}"
-            "?recursive=1"
-        )
+        api = f"https://api.github.com/repos/{owner}/{name}/git/trees/{ref}" "?recursive=1"
         headers = {
             "User-Agent": f"textbook-tool/{VERSION}",
             "Accept": "application/vnd.github+json",

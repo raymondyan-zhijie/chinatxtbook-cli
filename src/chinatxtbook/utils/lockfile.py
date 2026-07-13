@@ -22,6 +22,7 @@ def _pid_alive(pid: int) -> bool:
     if sys.platform == "win32":
         try:
             import ctypes
+
             h = ctypes.windll.kernel32.OpenProcess(0x1000, False, pid)
             if h:
                 ctypes.windll.kernel32.CloseHandle(h)
@@ -82,9 +83,7 @@ class InstanceLock:
                     return False
 
                 # Stale lock: reclaim atomically via rename to avoid races
-                reclaim = self.lock_file.with_name(
-                    f"{self.lock_file.name}.stale.{os.getpid()}"
-                )
+                reclaim = self.lock_file.with_name(f"{self.lock_file.name}.stale.{os.getpid()}")
                 try:
                     os.rename(str(self.lock_file), str(reclaim))
                     reclaim.unlink(missing_ok=True)

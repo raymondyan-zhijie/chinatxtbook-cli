@@ -62,6 +62,7 @@ def setup_console():
             pass
         try:
             import ctypes
+
             k32 = ctypes.windll.kernel32
             handle = k32.GetStdHandle(-11)
             mode = ctypes.c_uint32()

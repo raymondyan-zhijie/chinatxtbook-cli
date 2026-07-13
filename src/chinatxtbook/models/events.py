@@ -6,6 +6,7 @@ from dataclasses import dataclass
 @dataclass(frozen=True)
 class AppEvent:
     """Base class for all application events."""
+
     pass
 
 

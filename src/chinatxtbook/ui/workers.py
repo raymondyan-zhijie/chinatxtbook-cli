@@ -59,17 +59,21 @@ class PipelineWorker:
         _log(f"=== PIPELINE START: {total} books ===")
 
         # Populate _tasks for SCR-TASKS screen
-        app._tasks = [{
-            "id": f"tsk-{total}",
-            "name": f"下载 {total} 册教材",
-            "stage": "Preparing",
-            "progress": 0,
-            "status": "Running",
-        }]
+        app._tasks = [
+            {
+                "id": f"tsk-{total}",
+                "name": f"下载 {total} 册教材",
+                "stage": "Preparing",
+                "progress": 0,
+                "status": "Running",
+            }
+        ]
 
         for i, b in enumerate(selected_books[:5]):
-            _log(f"  [{i}] key={b.get('key','?')} path={b.get('path','?')} "
-                 f"name={b.get('name','?')[:40]} parts={b.get('part_count',0)}")
+            _log(
+                f"  [{i}] key={b.get('key','?')} path={b.get('path','?')} "
+                f"name={b.get('name','?')[:40]} parts={b.get('part_count',0)}"
+            )
         _log(f"app.selected_keys count: {len(app.selected_keys)}")
 
         git = app.git_client
@@ -113,9 +117,11 @@ class PipelineWorker:
             lock_file = WORK_DIR / ".git" / "index.lock"
             if lock_file.exists():
                 import subprocess as _sp
+
                 r = _sp.run(
                     ["git", "-C", str(WORK_DIR), "status", "--short"],
-                    capture_output=True, timeout=10,
+                    capture_output=True,
+                    timeout=10,
                     env={**os.environ, "GIT_TERMINAL_PROMPT": "0"},
                 )
                 if r.returncode != 0 and b"index.lock" in (r.stderr or b""):
@@ -174,6 +180,7 @@ class PipelineWorker:
                         dest.write_bytes(r.stdout)
                         break
                     from chinatxtbook.utils.format import safe_error
+
                     _log(f"show {git_path[:50]} attempt {attempt+1}: {safe_error(r.stderr, 80)}")
                     await asyncio.sleep(1)
                 else:
@@ -250,6 +257,7 @@ class PipelineWorker:
 
         # Run evaluator on each book
         from chinatxtbook.core.evaluator import GroupEvaluator
+
         evaluator = GroupEvaluator(WORK_DIR)
         prefiltered = []
         for book in selected_books:
@@ -260,7 +268,7 @@ class PipelineWorker:
             # F-05: Single PDFs (not split parts) bypass evaluator
             # Manifest only tracks split files (.pdf.N); single PDFs
             # are not split volumes and don't need completeness checks
-            is_single_pdf = (pc == 1)
+            is_single_pdf = pc == 1
             if is_single_pdf:
                 # Check it's genuinely a single PDF, not a lone .pdf.1
                 parts_dict = book.get("parts", {})
@@ -268,6 +276,7 @@ class PipelineWorker:
                     fname = list(parts_dict.values())[0]
                     fname = fname[0] if isinstance(fname, tuple) else fname
                     from chinatxtbook.core.manifest import SPLIT_RE
+
                     if not SPLIT_RE.match(fname):
                         # It's a real single PDF — safe to include directly
                         _log(f"  SINGLE PDF: {base} — copying directly")
@@ -277,9 +286,7 @@ class PipelineWorker:
             # Get present files from workspace
             present = SplitManifest.find_split_groups(WORK_DIR / rd)
             expected = (manifest.get(rd) or {}).get(base)
-            ev = evaluator.evaluate(app.state, rd, base,
-                                     present.get(base), expected,
-                                     verify=True)
+            ev = evaluator.evaluate(app.state, rd, base, present.get(base), expected, verify=True)
             action = ev.get("action", "merge")
             if action == "error":
                 _log(f"  SAFETY SKIP: {base} — {ev.get('detail','')[:80]}")
@@ -297,11 +304,14 @@ class PipelineWorker:
 
         # F-07: Disk space check before merge
         from chinatxtbook.core.downloader import DownloadOrchestrator
+
         est_size = sum(b.get("size", 0) for b in prefiltered)
         peak = DownloadOrchestrator.estimate_peak_space(est_size)
         import shutil as _shutil
-        usage = _shutil.disk_usage(str(OUTPUT_DIR.resolve()) if OUTPUT_DIR.exists()
-                                    else str(OUTPUT_DIR.parent.resolve()))
+
+        usage = _shutil.disk_usage(
+            str(OUTPUT_DIR.resolve()) if OUTPUT_DIR.exists() else str(OUTPUT_DIR.parent.resolve())
+        )
         if usage.free < peak:
             _log(f"DISK FULL: need {peak//(1024**3)}GB, have {usage.free//(1024**3)}GB")
             self._ui_status(f"ERROR: Disk full — need {peak//(1024**3)}GB free")
@@ -331,6 +341,7 @@ class PipelineWorker:
 
             # F-17: Validate output path with PathPolicy
             from chinatxtbook.utils.paths import PathPolicy
+
             safe_of = PathPolicy.safe_write_path(OUTPUT_DIR, f"{rd}/{base}")
             if safe_of is None:
                 _log(f"  PATH REJECTED: {rd}/{base}")
@@ -365,6 +376,7 @@ class PipelineWorker:
                     tmp.unlink(missing_ok=True)
                     # Copy with SHA256 verification
                     import hashlib as _hashlib
+
                     h = _hashlib.sha256()
                     with open(src, "rb") as fin, open(tmp, "wb") as fout:
                         while True:
@@ -386,22 +398,28 @@ class PipelineWorker:
                         tmp.unlink(missing_ok=True)
                         raise IOError("SHA256 mismatch")
                     os.replace(str(tmp), str(of))
-                    _log(f"  OK [{i+1}/{total}]: {base} ({of.stat().st_size}B, sha:{h.hexdigest()[:12]})")
+                    _log(
+                        f"  OK [{i+1}/{total}]: {base} ({of.stat().st_size}B, sha:{h.hexdigest()[:12]})"
+                    )
                     ok_count += 1
                     # F-04: Persist group record to state
                     app.state.setdefault("groups", {})[group_key] = {
-                        "status": "ok", "size": of.stat().st_size,
+                        "status": "ok",
+                        "size": of.stat().st_size,
                         "sha256": h.hexdigest(),
                         "parts": sorted(parts),
                         "at": datetime.now().isoformat(),
                     }
                 else:
                     merged_sha = await self._merge(sd, od, base, parts)
-                    _log(f"  OK [{i+1}/{total}]: {base} merged ({of.stat().st_size}B, sha:{merged_sha[:12]})")
+                    _log(
+                        f"  OK [{i+1}/{total}]: {base} merged ({of.stat().st_size}B, sha:{merged_sha[:12]})"
+                    )
                     ok_count += 1
                     # F-04: Persist group record to state
                     app.state.setdefault("groups", {})[group_key] = {
-                        "status": "ok", "size": of.stat().st_size,
+                        "status": "ok",
+                        "size": of.stat().st_size,
                         "sha256": merged_sha,
                         "parts": sorted(parts),
                         "at": datetime.now().isoformat(),
@@ -429,12 +447,14 @@ class PipelineWorker:
 
     async def _merge(self, sd, od, base, parts):
         import hashlib
+
         of = od / base
         tf = od / f"{base}.tmp"
         tf.unlink(missing_ok=True)
 
-        exp = sum((sd / (p[0] if isinstance(p, tuple) else p)).stat().st_size
-                  for p in parts.values())
+        exp = sum(
+            (sd / (p[0] if isinstance(p, tuple) else p)).stat().st_size for p in parts.values()
+        )
 
         h = hashlib.sha256()
         w = 0

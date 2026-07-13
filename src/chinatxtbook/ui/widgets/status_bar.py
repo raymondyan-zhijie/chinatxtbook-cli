@@ -25,6 +25,7 @@ class StatusBarWidget(Container):
         # Get disk space
         import shutil
         import os
+
         usage = shutil.disk_usage(os.getcwd())
         free_str = fmt_size(usage.free)
         if selected_count > 0:
@@ -35,15 +36,14 @@ class StatusBarWidget(Container):
         else:
             sel.update(f"📦 就绪 │ 💿 {free_str} │ Space选择 F5下载")
 
-    def update_progress(self, pct: float = 0, stage: str = "",
-                        current: str = "", done: int = 0, total: int = 0) -> None:
+    def update_progress(
+        self, pct: float = 0, stage: str = "", current: str = "", done: int = 0, total: int = 0
+    ) -> None:
         """Show download progress."""
         prog = self.query_one("#status-progress", Static)
         if pct > 0:
             bar = "█" * int(pct / 5) + "░" * (20 - int(pct / 5))
-            prog.update(
-                f"[{stage}] {bar} {pct:.0f}% ({done}/{total}) {current[:20]}"
-            )
+            prog.update(f"[{stage}] {bar} {pct:.0f}% ({done}/{total}) {current[:20]}")
         else:
             prog.update("")
 

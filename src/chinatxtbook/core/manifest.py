@@ -33,9 +33,7 @@ class SplitManifest:
                 continue
             m = SPLIT_RE.match(f.name)
             if m:
-                groups.setdefault(m.group(1), {}).setdefault(
-                    int(m.group(2)), []
-                ).append(f.name)
+                groups.setdefault(m.group(1), {}).setdefault(int(m.group(2)), []).append(f.name)
         return groups
 
     @staticmethod
@@ -58,7 +56,7 @@ class SplitManifest:
         if git_ls_tree_output is None:
             return None  # git failure
         if git_ls_tree_output.strip() == "":
-            return {}    # no split files, not an error
+            return {}  # no split files, not an error
 
         manifest = {}
         for line in git_ls_tree_output.splitlines():
@@ -73,9 +71,7 @@ class SplitManifest:
             base, idx = m.group(1), int(m.group(2))
             slot = manifest.setdefault(rel_dir, {}).setdefault(base, {})
             if idx in slot:
-                slot[idx] = (
-                    slot[idx] if isinstance(slot[idx], list) else [slot[idx]]
-                ) + [name]
+                slot[idx] = (slot[idx] if isinstance(slot[idx], list) else [slot[idx]]) + [name]
             else:
                 slot[idx] = name
         return manifest

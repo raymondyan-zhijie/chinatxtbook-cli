@@ -58,19 +58,25 @@ class UpdatesScreen(ModalScreen):
         """Check GitHub Releases API for newer versions."""
         import urllib.request
         import json
+
         soft = self.query_one("#update-software", Static)
         soft.update(f"当前版本: v{VERSION}\n正在检查 GitHub Releases...")
         try:
             url = "https://api.github.com/repos/raymondyan-zhijie/chinatxtbook-cli/releases/latest"
-            req = urllib.request.Request(url, headers={
-                "User-Agent": f"ChinaTextbook/{VERSION}",
-                "Accept": "application/vnd.github+json",
-            })
+            req = urllib.request.Request(
+                url,
+                headers={
+                    "User-Agent": f"ChinaTextbook/{VERSION}",
+                    "Accept": "application/vnd.github+json",
+                },
+            )
             with urllib.request.urlopen(req, timeout=10) as resp:
                 data = json.loads(resp.read().decode())
                 latest = data.get("tag_name", "").lstrip("v")
                 if latest and latest != VERSION:
-                    soft.update(f"当前版本: v{VERSION}\n新版本: v{latest}\n{data.get('html_url','')}")
+                    soft.update(
+                        f"当前版本: v{VERSION}\n新版本: v{latest}\n{data.get('html_url','')}"
+                    )
                 else:
                     soft.update(f"当前版本: v{VERSION}\n已是最新版本 ✓")
         except Exception as e:
@@ -81,7 +87,7 @@ class UpdatesScreen(ModalScreen):
         text = self.query_one("#update-textbook", Static)
         text.update("正在检查教材仓库更新...")
         app = self.app
-        if app and hasattr(app, 'git_client') and app.git_client:
+        if app and hasattr(app, "git_client") and app.git_client:
             try:
                 git = app.git_client
                 branch = app.state.get("default_branch", "master")
