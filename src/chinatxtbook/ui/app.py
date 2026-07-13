@@ -143,6 +143,8 @@ class ChinaTextbookApp(App):
                 if b.get("key") in self.selected_keys
             )
             self._update_status_bar()
+            # Refresh list items to show ☑ checkmarks
+            self._refresh_book_list_checkmarks(book_list)
             self.notify(f"已选当前视图 {len(visible)} 册")
         except Exception:
             self.notify("无法确定当前视图范围", severity="warning")
@@ -158,12 +160,29 @@ class ChinaTextbookApp(App):
                 if b.get("key") in self.selected_keys
             )
             self._update_status_bar()
+            self._refresh_book_list_checkmarks(book_list)
             self.notify("已取消当前视图选择")
         except Exception:
             self.selected_keys.clear()
             self.estimated_size = 0
             self._update_status_bar()
             self.notify("已取消全部选择")
+
+    def _refresh_book_list_checkmarks(self, book_list) -> None:
+        """Refresh checkmark display for all items in the book list."""
+        from textual.widgets import Label
+        from chinatxtbook.utils.format import fmt_size
+        for idx, meta in book_list._book_meta.items():
+            if idx >= len(book_list.children):
+                continue
+            item = book_list.children[idx]
+            try:
+                label = item.query_one(Label)
+                check = "☑" if meta["key"] in self.selected_keys else "⬜"
+                sz = fmt_size(meta["size"]) if meta["size"] else "?"
+                label.update(f"{check}  {meta['name']}  │  {meta['part_count']}卷  │  {sz}")
+            except Exception:
+                pass
 
     def action_show_help(self) -> None:
         self.push_screen(HelpScreen())
