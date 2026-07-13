@@ -87,7 +87,6 @@ class StateManager:
                 # F-16/M-1: Load jsonschema and validate
                 try:
                     from jsonschema import Draft202012Validator, ValidationError
-                    import importlib.resources
 
                     schema_path = (
                         Path(__file__).parent.parent.parent.parent
@@ -100,9 +99,7 @@ class StateManager:
                         # Cross-field invariants (2.3 Section 13)
                         for k, v in (s.get("groups") or {}).items():
                             if v.get("status") == "ok" and not v.get("sha256"):
-                                raise ValidationError(
-                                    f"groups.{k}: status=ok requires sha256"
-                                )
+                                raise ValidationError(f"groups.{k}: status=ok requires sha256")
                 except ImportError:
                     pass  # jsonschema not installed, skip validation
                 ver = str(s.get("version", ""))

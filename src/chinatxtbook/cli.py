@@ -86,9 +86,9 @@ def run_cli(args_list: list = None) -> int:
 
     # M-2: Reject unimplemented download/merge args with non-zero exit
     unimplemented = [
-        a for a in [
-            "clean", "dry_run", "update", "reselect", "skip_verify"
-        ] if getattr(args, a, False)
+        a
+        for a in ["clean", "dry_run", "update", "reselect", "skip_verify"]
+        if getattr(args, a, False)
     ]
     if unimplemented:
         print(
