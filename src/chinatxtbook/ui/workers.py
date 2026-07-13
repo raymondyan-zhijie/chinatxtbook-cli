@@ -251,6 +251,25 @@ class PipelineWorker:
         for book in selected_books:
             rd = book["path"]
             base = book["name"]
+            pc = book.get("part_count", 1)
+
+            # F-05: Single PDFs (not split parts) bypass evaluator
+            # Manifest only tracks split files (.pdf.N); single PDFs
+            # are not split volumes and don't need completeness checks
+            is_single_pdf = (pc == 1)
+            if is_single_pdf:
+                # Check it's genuinely a single PDF, not a lone .pdf.1
+                parts_dict = book.get("parts", {})
+                if parts_dict:
+                    fname = list(parts_dict.values())[0]
+                    fname = fname[0] if isinstance(fname, tuple) else fname
+                    from chinatxtbook.core.manifest import SPLIT_RE
+                    if not SPLIT_RE.match(fname):
+                        # It's a real single PDF — safe to include directly
+                        _log(f"  SINGLE PDF: {base} — copying directly")
+                        prefiltered.append(book)
+                        continue
+
             # Get present files from workspace
             present = SplitManifest.find_split_groups(WORK_DIR / rd)
             expected = (manifest.get(rd) or {}).get(base)
@@ -311,6 +330,9 @@ class PipelineWorker:
                 continue
 
             try:
+                # F-04: Persist group record to state for breakpoint resume
+                # and upstream deletion detection (A4/A6)
+                group_key = f"{rd}/{base}"
                 if pc <= 1:
                     fn = list(parts.values())[0]
                     fn = fn[0] if isinstance(fn, tuple) else fn
@@ -342,13 +364,33 @@ class PipelineWorker:
                     os.replace(str(tmp), str(of))
                     _log(f"  OK [{i+1}/{total}]: {base} ({of.stat().st_size}B, sha:{h.hexdigest()[:12]})")
                     ok_count += 1
+                    # F-04: Persist group record to state
+                    app.state.setdefault("groups", {})[group_key] = {
+                        "status": "ok", "size": of.stat().st_size,
+                        "sha256": h.hexdigest(),
+                        "parts": sorted(parts),
+                        "at": datetime.now().isoformat(),
+                    }
                 else:
                     await self._merge(sd, od, base, parts)
                     _log(f"  OK [{i+1}/{total}]: {base} merged ({of.stat().st_size}B)")
                     ok_count += 1
+                    # F-04: Persist group record to state
+                    app.state.setdefault("groups", {})[group_key] = {
+                        "status": "ok", "size": of.stat().st_size,
+                        "sha256": "",  # computed in _merge, stored for future skip
+                        "parts": sorted(parts),
+                        "at": datetime.now().isoformat(),
+                    }
             except Exception as e:
                 _log(f"  FAIL [{i+1}/{total}]: {base} - {e}")
                 fail_count += 1
+
+            # F-04: Save state after each book for breakpoint resume
+            try:
+                app.state_mgr.save(app.state)
+            except Exception:
+                pass
 
         self._ui_progress(100, "Done", done=ok_count)
         msg = f"COMPLETE: {ok_count} ok"
