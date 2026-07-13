@@ -84,6 +84,11 @@ class StateManager:
         if self.state_file.exists():
             try:
                 s = json.loads(self.state_file.read_text("utf-8"))
+                # F-16: Validate state structure
+                if not isinstance(s, dict):
+                    raise ValueError("State must be a JSON object")
+                if "groups" in s and not isinstance(s["groups"], dict):
+                    raise ValueError("groups must be a JSON object")
                 ver = str(s.get("version", ""))
                 if ver in MIGRATABLE_STATE_VERSIONS:
                     # v1.0→v1.1 migration: preserve groups (hashes/sizes),

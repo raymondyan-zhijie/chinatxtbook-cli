@@ -24,6 +24,16 @@ jobs:
       - run: python -c "from chinatxtbook.ui.app import run_app; print('TUI import OK')"
       - run: pytest tests/ -v --timeout=120
 
+  security-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install pip-audit
+      - run: pip-audit
+
   build-exe:
     needs: test
     runs-on: windows-latest
@@ -34,9 +44,12 @@ jobs:
           python-version: '3.11'
       - run: pip install pyinstaller textual
       - run: python scripts/build_exe.py
+      - run: sha256sum dist/ChinaTextbook.exe > dist/SHA256SUMS
       - uses: softprops/action-gh-release@v1
         with:
-          files: dist/ChinaTextbook.exe
+          files: |
+            dist/ChinaTextbook.exe
+            dist/SHA256SUMS
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -50,8 +63,11 @@ jobs:
           python-version: '3.11'
       - run: pip install build
       - run: python -m build
+      - run: sha256sum dist/* > dist/SHA256SUMS
       - uses: softprops/action-gh-release@v1
         with:
-          files: dist/*
+          files: |
+            dist/*
+            dist/SHA256SUMS
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

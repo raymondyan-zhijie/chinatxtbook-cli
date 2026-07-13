@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/raymondyan-zhijie/chinatxtbook-cli/schemas/app-state.schema.json",
+  "title": "ChinaTextbook App State",
+  "description": "Schema for china_textbook_state.json per design doc 2.3 Section 13",
+  "type": "object",
+  "required": ["version", "groups"],
+  "additionalProperties": true,
+  "properties": {
+    "version": { "type": "string" },
+    "schema_version": { "type": "string" },
+    "app_version": { "type": "string" },
+    "created_at": { "type": "string" },
+    "updated_at": { "type": ["string", "null"] },
+    "last_run": { "type": ["string", "null"] },
+    "repo_source": { "type": ["string", "null"] },
+    "default_branch": { "type": ["string", "null"] },
+    "clone_done": { "type": "boolean" },
+    "selected_paths": { "type": "array", "items": { "type": "string" } },
+    "groups": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "size": { "type": "integer" },
+          "sha256": { "type": "string" },
+          "parts": { "type": "array", "items": { "type": "integer" } },
+          "at": { "type": "string" },
+          "stale": { "type": "boolean" },
+          "legacy_imported": { "type": "boolean" }
+        }
+      }
+    },
+    "selection": {
+      "type": "object",
+      "properties": {
+        "requires_reselection": { "type": "boolean" },
+        "selected_books": { "type": "array" },
+        "selected_files": { "type": "array" },
+        "fingerprint": { "type": ["string", "null"] }
+      }
+    },
+    "tasks": { "type": "object" },
+    "preferences": { "type": "object" },
+    "updates": { "type": "object" },
+    "migration": { "type": ["object", "null"] },
+    "size_cache": { "type": ["object", "null"] },
+    "last_failures": { "type": "object" },
+    "target_dirs": { "type": "array" }
+  }
+}
