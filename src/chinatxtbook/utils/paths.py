@@ -16,47 +16,42 @@ class PathPolicy:
         """Resolve candidate path and verify it stays within root.
 
         Returns the resolved Path if safe, None if rejected.
-
-        Security invariants (2.2 Section 17):
-        - Reject .. traversal (path traversal)
-        - Reject absolute path injection
-        - Reject NUL bytes
-        - Reject symlinks escaping root
         """
         if not candidate:
             return None
         if "\0" in candidate:
             return None
         if candidate.startswith("/") or candidate.startswith("\\"):
-            return None  # Absolute path injection
+            return None
 
         try:
-            candidate_path = Path(candidate)
-            # Resolve to canonical form
-            resolved = (root / candidate_path).resolve()
+            # N-2: Resolve root first so relative_to works correctly
+            resolved_root = root.resolve()
+            resolved = (resolved_root / candidate).resolve()
         except (OSError, ValueError, RuntimeError):
             return None
 
-        # Check containment: resolved must be inside root
+        # Check containment: resolved must be inside resolved root
         try:
-            resolved.relative_to(root)
+            resolved.relative_to(resolved_root)
         except ValueError:
             return None
 
-        # Check for symlinks
-        if resolved.is_symlink():
-            return None
-        # Check parents for symlinks
-        for parent in resolved.parents:
-            if parent.is_symlink():
+        # Check for symlinks (must be done BEFORE resolve for correct detection)
+        candidate_path = resolved_root / Path(candidate)
+        parts = list(candidate_path.parents) + [candidate_path]
+        for part in parts:
+            try:
+                if part.is_symlink():
+                    return None
+            except OSError:
                 return None
 
         return resolved
 
     @staticmethod
     def safe_write_path(output_dir: Path, rel_path: str) -> Optional[Path]:
-        """Validate and create parent dirs for a write target.
-        Returns the safe resolved Path or None."""
+        """Validate and create parent dirs for a write target."""
         result = PathPolicy.resolve_within(output_dir, rel_path)
         if result:
             result.parent.mkdir(parents=True, exist_ok=True)

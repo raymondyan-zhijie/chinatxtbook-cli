@@ -109,10 +109,21 @@ class PipelineWorker:
         branch = state.get("default_branch", "master")
 
         try:
-            # Clean stale git lock files (from previous crashes)
+            # N-6: Only delete index.lock if no other git process is active
             lock_file = WORK_DIR / ".git" / "index.lock"
             if lock_file.exists():
-                _log(f"Removing stale lock: {lock_file}")
+                import subprocess as _sp
+                r = _sp.run(
+                    ["git", "-C", str(WORK_DIR), "status", "--short"],
+                    capture_output=True, timeout=10,
+                    env={**os.environ, "GIT_TERMINAL_PROMPT": "0"},
+                )
+                if r.returncode != 0 and b"index.lock" in (r.stderr or b""):
+                    _log("index.lock held by another process — cannot acquire")
+                    self._ui_status("ERROR: Git index locked by another process")
+                    app.pipeline_running = False
+                    return
+                _log("Removing stale index.lock")
                 lock_file.unlink(missing_ok=True)
 
             # Fetch all objects (critical for blobless clones behind slow networks)
@@ -148,10 +159,6 @@ class PipelineWorker:
             # pathspec bug in blobless clones)
             failed_paths = []
             for i, git_path in enumerate(all_paths):
-                # Clean stale locks
-                lock = WORK_DIR / ".git" / "index.lock"
-                lock.unlink(missing_ok=True)
-
                 dest = WORK_DIR / git_path
                 dest.parent.mkdir(parents=True, exist_ok=True)
 
@@ -322,6 +329,13 @@ class PipelineWorker:
             parts = book.get("parts", {})
             pc = book.get("part_count", 1)
 
+            # F-17: Validate output path with PathPolicy
+            from chinatxtbook.utils.paths import PathPolicy
+            safe_of = PathPolicy.safe_write_path(OUTPUT_DIR, f"{rd}/{base}")
+            if safe_of is None:
+                _log(f"  PATH REJECTED: {rd}/{base}")
+                fail_count += 1
+                continue
             sd = WORK_DIR / rd
             od = OUTPUT_DIR / rd
             od.mkdir(parents=True, exist_ok=True)
