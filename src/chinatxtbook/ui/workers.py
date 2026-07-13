@@ -2,7 +2,6 @@
 
 import asyncio
 import os
-import shutil
 import subprocess
 from datetime import datetime
 from pathlib import Path
@@ -102,10 +101,10 @@ class PipelineWorker:
             app.pipeline_running = False
             return
 
-        checkout_paths = sorted(d.rstrip("/") + "/" for d in dirs)
+        sorted(d.rstrip("/") + "/" for d in dirs)
 
         # Step 3: Fetch + Checkout
-        self._ui_status(f"Fetching updates...")
+        self._ui_status("Fetching updates...")
         self._ui_progress(10, "Downloading")
         branch = state.get("default_branch", "master")
 
@@ -224,8 +223,6 @@ class PipelineWorker:
         self._ui_progress(45, "Verifying")
 
         from chinatxtbook.core.manifest import SplitManifest, SPLIT_RE
-        import os as _os
-        from pathlib import Path as _Path
 
         # Build manifest from git tree (fail-closed)
         all_files = []
@@ -295,7 +292,7 @@ class PipelineWorker:
         from chinatxtbook.core.downloader import DownloadOrchestrator
         est_size = sum(b.get("size", 0) for b in prefiltered)
         peak = DownloadOrchestrator.estimate_peak_space(est_size)
-        import shutil as _shutil, os as _os
+        import shutil as _shutil
         usage = _shutil.disk_usage(str(OUTPUT_DIR.resolve()) if OUTPUT_DIR.exists()
                                     else str(OUTPUT_DIR.parent.resolve()))
         if usage.free < peak:

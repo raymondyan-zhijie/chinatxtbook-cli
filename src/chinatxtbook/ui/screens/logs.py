@@ -51,7 +51,8 @@ class LogsScreen(ModalScreen):
             log_view = self.query_one("#log-view")
             text = log_view.text
             try:
-                import subprocess, sys
+                import subprocess
+                import sys
                 if sys.platform == "win32":
                     subprocess.run(["clip"], input=text, text=True, shell=True)
                 else:
@@ -61,15 +62,17 @@ class LogsScreen(ModalScreen):
                 self.notify(f"复制失败（日志共 {len(text)} 字符）", severity="warning")
         elif event.button.id == "log-export":
             from datetime import datetime
-            import sys, platform, shutil
+            import sys
+            import platform
+            import shutil
             fn = f"diagnostic_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
             lines = [
-                f"ChinaTextbook Diagnostic Report",
+                "ChinaTextbook Diagnostic Report",
                 f"Generated: {datetime.now().isoformat()}",
                 f"Python: {sys.version}",
                 f"Platform: {platform.system()} {platform.release()}",
                 f"Terminal: {shutil.get_terminal_size().columns}x{shutil.get_terminal_size().lines}",
-                f"",
+                "",
                 self.query_one("#log-view").text,
             ]
             with open(fn, "w", encoding="utf-8") as f:

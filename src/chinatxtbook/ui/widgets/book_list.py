@@ -10,7 +10,6 @@ from pathlib import Path
 from textual.widgets import ListView, ListItem, Label
 from textual.binding import Binding
 
-from chinatxtbook.ui.messages import BookFocused
 from chinatxtbook.utils.format import fmt_size
 
 
@@ -64,7 +63,6 @@ class BookListWidget(ListView):
         if not git_client or not git_client.is_repo_valid():
             return
 
-        import os
         from chinatxtbook.core.manifest import SPLIT_RE
         from chinatxtbook.utils.format import fmt_size
 
@@ -194,7 +192,6 @@ class BookListWidget(ListView):
         selected = key in app.selected_keys
         check = "☑" if selected else "⬜"
         name = meta["name"]
-        from chinatxtbook.utils.format import fmt_size
         sz_str = fmt_size(meta["size"]) if meta["size"] else "?"
         new_label = f"{check}  {name}  │  {meta['part_count']}卷  │  {sz_str}"
 

@@ -9,7 +9,7 @@ import os
 import threading
 import time
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Optional
 
 from chinatxtbook.config import CHUNK_SIZE
 from chinatxtbook.utils.platform import is_interrupted, clear_line, term_width

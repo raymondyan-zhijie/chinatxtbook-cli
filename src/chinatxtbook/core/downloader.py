@@ -9,17 +9,16 @@ import shutil
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
-from pathlib import Path
 from typing import Callable, Optional
 
-from chinatxtbook.config import WORK_DIR, DEFAULT_WORKERS, MAX_WORKERS
+from chinatxtbook.config import WORK_DIR, DEFAULT_WORKERS
 from chinatxtbook.core.git_client import GitClient
 from chinatxtbook.core.evaluator import GroupEvaluator
 from chinatxtbook.core.manifest import SplitManifest
 from chinatxtbook.core.merger import PdfMerger, ProgressTracker
 from chinatxtbook.core.state import StateManager
-from chinatxtbook.utils.format import fmt_size, safe_error
-from chinatxtbook.utils.platform import is_interrupted, clear_line
+from chinatxtbook.utils.format import fmt_size
+from chinatxtbook.utils.platform import is_interrupted
 
 
 class DownloadOrchestrator:

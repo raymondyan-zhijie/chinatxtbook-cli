@@ -4,18 +4,16 @@ Handles state.json persistence, version compatibility, and stale group marking.
 Source: v1.0 lines 296-343, 430-456, 1530-1623.
 """
 
-import copy
 import hashlib
 import json
 import os
 import shutil
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Optional
+from typing import Optional
 
 from chinatxtbook import VERSION, COMPATIBLE_STATE_VERSIONS, MIGRATABLE_STATE_VERSIONS
 from chinatxtbook.config import STATE_FILE
-from chinatxtbook.utils.platform import is_interrupted
 
 
 class StateManager:
@@ -168,10 +166,8 @@ class StateManager:
         groups = state.get("groups") or {}
 
         if old and new:
-            import subprocess
             ok, out, _ = self._git_diff(work_dir, old, new)
             if ok:
-                import re
                 from chinatxtbook.core.manifest import SPLIT_RE
 
                 invalidated = 0

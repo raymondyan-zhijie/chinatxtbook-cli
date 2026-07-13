@@ -13,9 +13,8 @@ from pathlib import Path
 from typing import Optional
 
 from chinatxtbook.config import WORK_DIR
-from chinatxtbook.core.manifest import SplitManifest, SPLIT_RE
+from chinatxtbook.core.manifest import SplitManifest
 from chinatxtbook.core.merger import hash_file, InterruptedError
-from chinatxtbook.utils.platform import is_interrupted
 
 
 class GroupEvaluator:

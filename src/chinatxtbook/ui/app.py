@@ -158,7 +158,7 @@ class ChinaTextbookApp(App):
                 if b.get("key") in self.selected_keys
             )
             self._update_status_bar()
-            self.notify(f"已取消当前视图选择")
+            self.notify("已取消当前视图选择")
         except Exception:
             self.selected_keys.clear()
             self.estimated_size = 0
@@ -237,7 +237,9 @@ class ChinaTextbookApp(App):
         from chinatxtbook.config import OUTPUT_DIR
         fp = OUTPUT_DIR / path / name
         if fp.exists():
-            import os, subprocess, sys
+            import os
+            import subprocess
+            import sys
             try:
                 if sys.platform == "win32":
                     os.startfile(str(fp))
@@ -254,7 +256,9 @@ class ChinaTextbookApp(App):
     def action_open_dir(self) -> None:
         """[L] Open the output directory in file explorer."""
         from chinatxtbook.config import OUTPUT_DIR
-        import os, sys, subprocess
+        import os
+        import sys
+        import subprocess
         fp = OUTPUT_DIR / (self.focused_book.get("path", "") if self.focused_book else "")
         fp.mkdir(parents=True, exist_ok=True)
         try:

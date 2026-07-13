@@ -8,7 +8,6 @@ import os
 import shutil
 import signal
 import sys
-import threading
 
 # ── Interrupt handling ──────────────────────────────────────────
 _INTERRUPTED = False

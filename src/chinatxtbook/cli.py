@@ -4,17 +4,16 @@ Provides backward compatibility with v1.0 command-line interface.
 """
 
 import argparse
-import sys
 
 from chinatxtbook import VERSION
 from chinatxtbook.config import (
-    WORK_DIR, STATE_FILE, GITHUB_REPO, DEFAULT_TOP_DIRS, DEFAULT_WORKERS, MAX_WORKERS,
+    DEFAULT_TOP_DIRS, DEFAULT_WORKERS, MAX_WORKERS,
 )
 from chinatxtbook.core.git_client import GitClient
 from chinatxtbook.core.state import StateManager
 from chinatxtbook.core.reporter import StatusReporter, ReportGenerator
 from chinatxtbook.utils.lockfile import InstanceLock
-from chinatxtbook.utils.platform import setup_console, is_interrupted
+from chinatxtbook.utils.platform import setup_console
 
 
 def run_cli(args_list: list = None) -> int:
@@ -50,15 +49,15 @@ def run_cli(args_list: list = None) -> int:
 
     args = parser.parse_args(args_list)
 
-    workers = min(max(1, args.workers), MAX_WORKERS)
-    top_dirs = (
+    min(max(1, args.workers), MAX_WORKERS)
+    (
         [d.strip() for d in args.dirs.replace("，", ",").split(",") if d.strip()]
         if args.dirs else DEFAULT_TOP_DIRS
     )
 
     state_mgr = StateManager()
     state = state_mgr.load()
-    git_client = GitClient()
+    GitClient()
 
     if args.status:
         StatusReporter.show(state)

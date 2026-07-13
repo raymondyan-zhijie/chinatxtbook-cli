@@ -56,7 +56,8 @@ class UpdatesScreen(ModalScreen):
 
     def _check_software_update(self):
         """Check GitHub Releases API for newer versions."""
-        import urllib.request, json
+        import urllib.request
+        import json
         soft = self.query_one("#update-software", Static)
         soft.update(f"当前版本: v{VERSION}\n正在检查 GitHub Releases...")
         try:

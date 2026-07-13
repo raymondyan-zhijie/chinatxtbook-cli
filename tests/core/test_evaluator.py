@@ -3,12 +3,10 @@
 Covers all branches from v1.0 evaluate_group().
 """
 
-from pathlib import Path
 
 import pytest
 
 from chinatxtbook.core.evaluator import GroupEvaluator
-from chinatxtbook.core.manifest import SplitManifest
 
 
 class TestGroupEvaluator:

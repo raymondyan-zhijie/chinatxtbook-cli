@@ -6,7 +6,6 @@ Shows: selection status | download progress | contextual hints.
 from textual.app import ComposeResult
 from textual.containers import Container, Horizontal
 from textual.widgets import Static
-from textual.reactive import reactive
 
 from chinatxtbook.utils.format import fmt_size
 
@@ -24,7 +23,8 @@ class StatusBarWidget(Container):
         """Update selection display."""
         sel = self.query_one("#status-selection", Static)
         # Get disk space
-        import shutil, os
+        import shutil
+        import os
         usage = shutil.disk_usage(os.getcwd())
         free_str = fmt_size(usage.free)
         if selected_count > 0:

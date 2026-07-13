@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Callable, Optional
 
 from chinatxtbook.config import WORK_DIR, GITHUB_REPO, VERSION
-from chinatxtbook.utils.format import redact_url, safe_error, fmt_size
+from chinatxtbook.utils.format import safe_error
 from chinatxtbook.utils.platform import is_interrupted
 
 # Transient error patterns for retry

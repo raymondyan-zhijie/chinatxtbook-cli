@@ -1,7 +1,6 @@
 """Application events per design doc 2.4 Section 19."""
 
-from dataclasses import dataclass, field
-from typing import Optional
+from dataclasses import dataclass
 
 
 @dataclass(frozen=True)

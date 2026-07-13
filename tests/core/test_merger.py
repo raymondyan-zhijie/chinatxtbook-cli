@@ -1,7 +1,5 @@
 """Tests for PdfMerger — atomic merge with SHA256 verification."""
 
-import hashlib
-import os
 from pathlib import Path
 
 import pytest

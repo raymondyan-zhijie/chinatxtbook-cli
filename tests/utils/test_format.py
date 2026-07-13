@@ -1,6 +1,5 @@
 """Tests for format utilities."""
 
-import pytest
 from chinatxtbook.utils.format import redact_url, safe_error, fmt_size
 
 

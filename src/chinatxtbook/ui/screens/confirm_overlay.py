@@ -45,7 +45,8 @@ class ConfirmOverlay(ModalScreen):
                 total_size += b.get('size', 0)
 
         # Check disk space
-        import shutil, os
+        import shutil
+        import os
         usage = shutil.disk_usage(os.getcwd())
         free_gb = usage.free / (1024**3)
         peak = int(total_size * 3.2) + 2 * 1024**3

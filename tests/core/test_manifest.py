@@ -1,8 +1,6 @@
 """Tests for SplitManifest."""
 
-from pathlib import Path
 
-import pytest
 
 from chinatxtbook.core.manifest import SplitManifest, SPLIT_RE
 

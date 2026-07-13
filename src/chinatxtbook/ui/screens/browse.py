@@ -54,7 +54,6 @@ class BrowseScreen(Screen):
         bar.update_status("Loading catalog...")
 
         # Populate size cache from GitHub API (async in background)
-        import asyncio
         git = app.git_client
         if not app.state.get("size_cache"):
             bar.update_status("Fetching file sizes from GitHub API...")

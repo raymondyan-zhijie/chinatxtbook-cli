@@ -12,7 +12,6 @@ from textual.containers import Vertical
 from textual.screen import ModalScreen
 from textual.widgets import Static, Button
 
-from chinatxtbook import VERSION
 
 
 class HelpScreen(ModalScreen):

@@ -1,7 +1,5 @@
 """Shared pytest fixtures for ChinaTextbook tests."""
 
-import json
-import os
 import shutil
 import tempfile
 from datetime import datetime
@@ -97,7 +95,6 @@ def create_split_files():
         """Create split files. parts: {idx: filename}, sizes: list of byte sizes."""
         d = base_dir / rel_dir
         d.mkdir(parents=True, exist_ok=True)
-        total = 0
         for i, idx in enumerate(sorted(parts)):
             fname = parts[idx]
             content = b"\x00" * (sizes[i] if sizes else 1024)

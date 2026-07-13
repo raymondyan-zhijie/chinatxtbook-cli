@@ -13,7 +13,6 @@ from pathlib import Path
 from typing import Optional
 
 from chinatxtbook.core.git_client import GitClient
-from chinatxtbook.utils.format import fmt_size
 
 
 @dataclass

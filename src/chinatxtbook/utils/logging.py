@@ -7,7 +7,7 @@ Source: v1.0 lines 173-221.
 import threading
 from datetime import datetime
 from pathlib import Path
-from typing import Callable, Optional, TextIO
+from typing import Callable, Optional
 
 from chinatxtbook.utils.format import redact_url
 

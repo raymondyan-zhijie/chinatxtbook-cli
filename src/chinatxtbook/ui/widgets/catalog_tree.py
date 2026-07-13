@@ -4,8 +4,6 @@ Pure directory tree mirroring the GitHub repository structure exactly.
 Lazy-loaded: children fetched from git on node expand.
 """
 
-import os
-from pathlib import Path
 
 from textual.widgets import Tree
 
@@ -62,7 +60,6 @@ class CatalogTreeWidget(Tree):
             return
 
         # Separate directories from files
-        from chinatxtbook.core.manifest import SPLIT_RE
 
         # Get unique parent directories for entries
         subdirs = set()
@@ -97,7 +94,7 @@ class CatalogTreeWidget(Tree):
             parts = re.split(r'\s+', line, maxsplit=3)
             if len(parts) < 4:
                 continue
-            mode, obj_type, obj_hash, full_name = parts[0], parts[1], parts[2], parts[3]
+            _mode, obj_type, _obj_hash, full_name = parts[0], parts[1], parts[2], parts[3]
             # Extract just the basename for display
             name = full_name.split("/")[-1] if "/" in full_name else full_name
 

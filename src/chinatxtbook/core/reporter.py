@@ -5,10 +5,9 @@ Source: v1.0 lines 1530-1623.
 
 import os
 from datetime import datetime
-from pathlib import Path
 
 from chinatxtbook import VERSION
-from chinatxtbook.config import WORK_DIR, REPORT_FILE, STATE_FILE
+from chinatxtbook.config import WORK_DIR, REPORT_FILE
 from chinatxtbook.core.state import groups_in_selection
 from chinatxtbook.utils.format import fmt_size
 

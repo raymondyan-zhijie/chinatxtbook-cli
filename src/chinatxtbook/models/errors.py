@@ -1,7 +1,6 @@
 """Stable error codes per design doc 2.2 Section 14.1."""
 
 from dataclasses import dataclass, field
-from typing import Optional
 
 
 class ErrorCode:

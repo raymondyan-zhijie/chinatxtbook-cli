@@ -74,9 +74,9 @@ class InstanceLock:
                 try:
                     info = json.loads(self.lock_file.read_text("utf-8"))
                     pid = int(info.get("pid", -1))
-                    started = info.get("started", "?")
+                    info.get("started", "?")
                 except Exception:
-                    pid, started = -1, "?"
+                    pid, _started = -1, "?"
 
                 if _pid_alive(pid):
                     return False
