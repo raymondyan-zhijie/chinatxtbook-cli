@@ -1,6 +1,6 @@
 """ChinaTextbook - Chinese textbook PDF batch downloader with Textual TUI."""
 
-__version__ = "1.1.0"
+__version__ = "1.1.1"
 VERSION = __version__
 # v1.0 is NOT compatible — see FR-020: migration must clear old selected_paths
 # and prompt user to re-select

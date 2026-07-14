@@ -7,6 +7,7 @@ PyInstaller.__main__.run([
     '--onefile',
     '--console',
     '--add-data=src/chinatxtbook/ui/styles.tcss:chinatxtbook/ui',
+    '--add-data=src/chinatxtbook/schemas/app-state.schema.json:chinatxtbook/schemas',
     '--collect-all=textual',
     '--hidden-import=textual.widgets',
     '--hidden-import=textual.containers',

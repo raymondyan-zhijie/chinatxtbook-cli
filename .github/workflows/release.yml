@@ -68,6 +68,7 @@ jobs:
       - run: pip install build twine cyclonedx-bom
       - run: python -m build
       - run: python -m twine check dist/*
+      - run: python -c "import zipfile, glob; whl=glob.glob('dist/*.whl')[0]; assert any('styles.tcss' in n for n in zipfile.ZipFile(whl).namelist()), 'styles.tcss missing from wheel'; print('wheel contains styles.tcss')"
       - run: pip install dist/*.whl && cyclonedx-py environment -o dist/sbom.json
         continue-on-error: true
       - run: sha256sum dist/*.whl dist/*.tar.gz > dist/SHA256SUMS

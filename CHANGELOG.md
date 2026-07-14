@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.1.1
+
+### Fixes
+- **R5-1 (Critical)**: Package `ui/styles.tcss` in wheel/sdist -- TUI crashed on
+  `pip install` due to missing CSS (`StylesheetError`). Added `ui/*.tcss` to
+  `package-data`; verified tcss accessible in installed wheel.
+- **R5-2**: Include `schemas/app-state.schema.json` in EXE build (`--add-data`),
+  so schema validation works in the Windows executable.
+- **R5-3**: CI `build-wheel` now asserts `styles.tcss` is in the wheel (catches
+  packaging regressions that `twine check` misses).
+
 ## v1.1.0
 
 ### Architectural Changes
