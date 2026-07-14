@@ -103,5 +103,5 @@ class UpdatesScreen(ModalScreen):
         else:
             text.update("仓库未初始化，无法检查更新")
 
-    def action_dismiss(self) -> None:
-        self.dismiss()
+    async def action_dismiss(self, result: object = None) -> None:
+        self.dismiss(result)

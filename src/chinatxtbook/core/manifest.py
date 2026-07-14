@@ -23,7 +23,7 @@ class SplitManifest:
 
         Source: v1.0 lines 784-797.
         """
-        groups = {}
+        groups: dict = {}
         try:
             entries = list(dir_path.iterdir())
         except OSError:
@@ -58,7 +58,7 @@ class SplitManifest:
         if git_ls_tree_output.strip() == "":
             return {}  # no split files, not an error
 
-        manifest = {}
+        manifest: dict = {}
         for line in git_ls_tree_output.splitlines():
             line = line.strip()
             if not line:

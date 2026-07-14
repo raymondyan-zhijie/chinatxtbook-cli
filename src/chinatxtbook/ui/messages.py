@@ -3,6 +3,8 @@
 Messages are posted by workers and handled by widgets to update the UI.
 """
 
+from typing import Optional
+
 from textual.message import Message
 
 
@@ -26,7 +28,7 @@ class BookSelected(Message):
 class BookFocused(Message):
     """Posted when a book receives focus (for detail panel)."""
 
-    def __init__(self, book_data: dict = None):
+    def __init__(self, book_data: Optional[dict] = None):
         super().__init__()
         self.book_data = book_data or {}
 

@@ -118,12 +118,12 @@ class GitClient:
     def get_head_commit(self) -> Optional[str]:
         """Get HEAD commit SHA. Source: v1.0 lines 394-396."""
         ok, out, _ = self.run(["rev-parse", "HEAD"], retry=1)
-        return out.strip() if ok else None
+        return str(out).strip() if ok else None
 
     def get_origin_url(self) -> Optional[str]:
         """Get origin remote URL. Source: v1.0 lines 401-403."""
         ok, out, _ = self.run(["remote", "get-url", "origin"], retry=1)
-        return out.strip() if ok else None
+        return str(out).strip() if ok else None
 
     def ls_tree(self, path_prefix: str = "", recursive: bool = False):
         """List files in git tree. Returns None on git failure, [] on empty.
@@ -150,7 +150,7 @@ class GitClient:
     def detect_default_branch(self, state: dict) -> str:
         """Detect default branch (master/main). Source: v1.0 lines 409-428."""
         if state.get("default_branch"):
-            return state["default_branch"]
+            return str(state["default_branch"])
 
         branch = None
         ok, out, _ = self.run(["symbolic-ref", "--short", "refs/remotes/origin/HEAD"], retry=1)
@@ -169,7 +169,7 @@ class GitClient:
         state["default_branch"] = branch
         return branch
 
-    def clone(self, repo_url: str = None) -> bool:
+    def clone(self, repo_url: Optional[str] = None) -> bool:
         """Blobless clone of the repository. Source: v1.0 lines 1101-1130."""
         url = repo_url or self.repo_url
         if (self.work_dir / ".git").exists():
@@ -273,7 +273,7 @@ class GitClient:
     def rev_parse(self, ref: str) -> Optional[str]:
         """Get commit SHA for a ref. Source: v1.0 line 1502."""
         ok, out, _ = self.run(["rev-parse", ref], retry=1)
-        return out.strip() if ok else None
+        return str(out).strip() if ok else None
 
     def get_remote_sizes(self, ref: str) -> tuple:
         """Fetch directory/file sizes from GitHub Trees API.
@@ -306,7 +306,8 @@ class GitClient:
 
         tree = data.get("tree") or []
         truncated = bool(data.get("truncated"))
-        dir_sizes, file_sizes = {}, {}
+        dir_sizes: dict = {}
+        file_sizes: dict = {}
 
         for ent in tree:
             if ent.get("type") != "blob":

@@ -21,6 +21,9 @@ env/
 # Claude Code local settings (per-machine permissions, not shared)
 .claude/settings.local.json
 
+# Local task tracking (workflow scratch, not project code)
+tasks/
+
 # v1.0 legacy (kept as reference, not active code)
 china_textbook_v1.0.py
 

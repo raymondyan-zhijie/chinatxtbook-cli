@@ -1,4 +1,4 @@
-"""SCR-LOGS — Log viewer (F8).
+"""SCR-LOGS - Log viewer (F8).
 
 Scrollable log with level filtering, copy, and export diagnostics.
 """
@@ -54,8 +54,8 @@ class LogsScreen(ModalScreen):
         if event.button.id == "log-close":
             self.dismiss()
         elif event.button.id == "log-copy":
-            log_view = self.query_one("#log-view")
-            text = log_view.text
+            log_view = self.query_one("#log-view", RichLog)
+            text = log_view.text  # type: ignore[attr-defined]
             try:
                 import subprocess
                 import sys
@@ -81,11 +81,11 @@ class LogsScreen(ModalScreen):
                 f"Platform: {platform.system()} {platform.release()}",
                 f"Terminal: {shutil.get_terminal_size().columns}x{shutil.get_terminal_size().lines}",
                 "",
-                self.query_one("#log-view").text,
+                self.query_one("#log-view", RichLog).text,  # type: ignore[attr-defined]
             ]
             with open(fn, "w", encoding="utf-8") as f:
                 f.write("\n".join(lines))
             self.notify(f"诊断报告已保存: {fn}", severity="information")
 
-    def action_dismiss(self) -> None:
-        self.dismiss()
+    async def action_dismiss(self, result: object = None) -> None:
+        self.dismiss(result)

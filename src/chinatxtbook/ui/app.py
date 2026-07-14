@@ -1,7 +1,7 @@
 """ChinaTextbook Textual TUI Application v1.1.
 
 Screen-based architecture per design docs 2.1-2.5.
-UI → Application layer → Services/Core (no Widget holds GitClient).
+UI -> Application layer -> Services/Core (no Widget holds GitClient).
 """
 
 from typing import Optional
@@ -14,6 +14,7 @@ from chinatxtbook.config import GITHUB_REPO, WORK_DIR
 from chinatxtbook.core.git_client import GitClient
 from chinatxtbook.core.state import StateManager
 
+from chinatxtbook.ui.widgets.book_list import BookListWidget
 from chinatxtbook.ui.screens.browse import BrowseScreen
 from chinatxtbook.ui.screens.selected import SelectedScreen
 from chinatxtbook.ui.screens.tasks import TasksScreen
@@ -45,7 +46,7 @@ class ChinaTextbookApp(App):
     """Main Textual application for ChinaTextbook v1.1."""
 
     CSS_PATH = "styles.tcss"
-    BINDINGS = BINDINGS
+    BINDINGS = BINDINGS  # type: ignore[assignment]
 
     def __init__(self):
         super().__init__()
@@ -57,6 +58,7 @@ class ChinaTextbookApp(App):
         self.focused_book: Optional[dict] = None
         self.estimated_size: int = 0
         self.pipeline_running: bool = False
+        self._quit_warned: bool = False
         self._tasks: list = []
         self._log_buffer: list = []
 
@@ -88,7 +90,7 @@ class ChinaTextbookApp(App):
                 official_base = GITHUB_REPO.rstrip("/").replace(".git", "")
                 actual_base = origin.rstrip("/").replace(".git", "")
                 if official_base != actual_base:
-                    self.sub_title = "⚠️ 非官方仓库 — 拒绝操作"
+                    self.sub_title = "⚠️ 非官方仓库 - 拒绝操作"
                     self.notify(
                         f"工作区 origin 非官方来源\n期望: {GITHUB_REPO}\n实际: {origin}\n"
                         "请删除 ChinaTextbook_Workspace 目录后重新运行",
@@ -97,7 +99,7 @@ class ChinaTextbookApp(App):
             branch = self.state.get("default_branch", "master")
             self.sub_title = f"📦 仓库就绪 [{branch}]"
         else:
-            self.sub_title = "📦 未初始化 — 按 F5 克隆仓库"
+            self.sub_title = "📦 未初始化 - 按 F5 克隆仓库"
 
     def _update_status_bar(self) -> None:
         try:
@@ -114,7 +116,7 @@ class ChinaTextbookApp(App):
             return
         try:
             screen = self.screen
-            book_list = screen.query_one("#book-list")
+            book_list = screen.query_one("#book-list", BookListWidget)
             size_cache = (self.state.get("size_cache") or {}).get("files", {})
             book_list.load_directory(self.git_client, dir_path, size_cache)
             # Merge (don't overwrite): accumulate books from ALL visited directories
@@ -137,7 +139,7 @@ class ChinaTextbookApp(App):
     def action_select_all(self) -> None:
         # Select books currently visible in the center list (current scope)
         try:
-            book_list = self.screen.query_one("#book-list")
+            book_list = self.screen.query_one("#book-list", BookListWidget)
             visible = set(book_list._all_groups.keys())
             self.selected_keys.update(visible)
             self.estimated_size = sum(
@@ -153,7 +155,7 @@ class ChinaTextbookApp(App):
     def action_deselect_all(self) -> None:
         # Deselect only books in current scope (visible in center list)
         try:
-            book_list = self.screen.query_one("#book-list")
+            book_list = self.screen.query_one("#book-list", BookListWidget)
             visible = set(book_list._all_groups.keys())
             self.selected_keys.difference_update(visible)
             self.estimated_size = sum(
@@ -168,7 +170,7 @@ class ChinaTextbookApp(App):
             self._update_status_bar()
             self.notify("已取消全部选择")
 
-    def _refresh_book_list_checkmarks(self, book_list) -> None:
+    def _refresh_book_list_checkmarks(self, book_list: BookListWidget) -> None:
         """Refresh checkmark display for all items in the book list."""
         from textual.widgets import Label
         from chinatxtbook.utils.format import fmt_size
@@ -205,7 +207,7 @@ class ChinaTextbookApp(App):
         # Push confirmation screen with callback
         self.push_screen(ConfirmOverlay(), callback=self._on_download_confirmed)
 
-    def _on_download_confirmed(self, confirmed: bool) -> None:
+    def _on_download_confirmed(self, confirmed: object = None) -> None:
         """Callback after ConfirmOverlay is dismissed."""
         if not confirmed:
             return
@@ -324,7 +326,7 @@ class ChinaTextbookApp(App):
 
     def action_quit_app(self) -> None:
         if self.pipeline_running:
-            if not hasattr(self, "_quit_warned") or not self._quit_warned:
+            if not self._quit_warned:
                 self._quit_warned = True
                 self.notify("有任务在运行，再次按 Q 强制退出", severity="warning")
                 return
@@ -348,8 +350,8 @@ class ChinaTextbookApp(App):
                 else:
                     self.dismiss()
 
-            def action_dismiss(self):
-                self.dismiss()
+            async def action_dismiss(self, result: object = None) -> None:
+                self.dismiss(result)
 
         self.push_screen(QuitScreen())
 

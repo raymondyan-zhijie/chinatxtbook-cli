@@ -11,7 +11,7 @@ jobs:
     strategy:
       matrix:
         os: [windows-latest, ubuntu-latest]
-        python-version: ['3.10', '3.11', '3.12']
+        python-version: ['3.10', '3.11', '3.12', '3.13']
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -21,6 +21,7 @@ jobs:
       - run: ruff check src/ tests/
       - run: black --check src/ tests/
       - run: python -m compileall -q src/
+      - run: python -m mypy src/chinatxtbook
       - run: python -c "from chinatxtbook.ui.app import run_app; print('TUI import OK')"
       - run: pytest tests/ -v --timeout=120
 

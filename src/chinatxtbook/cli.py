@@ -1,24 +1,97 @@
 """CLI mode for headless/automated use (v1.0-compatible arguments).
 
-Provides backward compatibility with v1.0 command-line interface.
+F-02: Full download/merge pipeline wired via DownloadOrchestrator, so the
+CLI is no longer read-only. DownloadOrchestrator is the v1.0-audited headless
+engine; CLI and TUI now share the same core.
 """
 
 import argparse
+from typing import Optional
 
 from chinatxtbook import VERSION
 from chinatxtbook.config import (
     DEFAULT_TOP_DIRS,
     DEFAULT_WORKERS,
     MAX_WORKERS,
+    OUTPUT_DIR,
 )
+from chinatxtbook.core.downloader import DownloadOrchestrator
 from chinatxtbook.core.git_client import GitClient
 from chinatxtbook.core.state import StateManager
 from chinatxtbook.core.reporter import StatusReporter, ReportGenerator
 from chinatxtbook.utils.lockfile import InstanceLock
 from chinatxtbook.utils.platform import setup_console
 
+_LEVEL_PREFIX = {"ERROR": "✗", "OK": "✓", "WARN": "!", "STEP": "■", "DATA": " ", "INFO": " "}
 
-def run_cli(args_list: list = None) -> int:
+
+def _cli_log(msg: str, level: str = "INFO"):
+    """Log callback for DownloadOrchestrator -> stdout."""
+    print(f"{_LEVEL_PREFIX.get(level, ' ')} {msg}")
+
+
+def _parse_dirs(args) -> list[str]:
+    """Parse --dirs into a list of top-level directories."""
+    if args.dirs:
+        return [d.strip() for d in args.dirs.replace("，", ",").split(",") if d.strip()]
+    return list(DEFAULT_TOP_DIRS)
+
+
+def _run_download(args, state, state_mgr, tops, workers) -> int:
+    """Execute clone -> checkout -> scan -> merge via DownloadOrchestrator.
+
+    F-02: Wires the full pipeline that was previously TUI-only.
+    """
+    git = GitClient(log_callback=_cli_log)
+    orch = DownloadOrchestrator(git, state_mgr, log_callback=_cli_log)
+
+    branch = git.detect_default_branch(state)
+    state_mgr.save(state)
+
+    # Step 1: clone if needed
+    if not git.is_repo_valid():
+        if not orch.clone(state, git.repo_url):
+            return 1
+
+    # --update: fetch + fast-forward + stale marking, then return.
+    # Re-run the default flow afterwards to re-download changed content.
+    if args.update:
+        return 0 if orch.update(state, branch) else 1
+
+    # Set selection from --dirs
+    state["selected_paths"] = [t.rstrip("/") + "/" for t in tops]
+
+    # --reselect: force re-checkout
+    if args.reselect:
+        state["checkout_done"] = False
+        state["target_dirs"] = []
+
+    # Step 2: checkout if needed
+    if not state.get("checkout_done"):
+        if not orch.checkout(state, branch):
+            return 1
+
+    # Step 3: scan (build manifest, fail-closed)
+    manifest = orch.scan(state, force=args.reselect)
+    if manifest is None:
+        return 1
+
+    # Step 4: merge -> OUTPUT_DIR (--clean / --dry-run / --skip-verify)
+    if not orch.merge(
+        state,
+        manifest,
+        clean=args.clean,
+        dry_run=args.dry_run,
+        workers=workers,
+        verify=not args.skip_verify,
+        output_dir=OUTPUT_DIR,
+    ):
+        return 1
+
+    return 0
+
+
+def run_cli(args_list: Optional[list] = None) -> int:
     """Run in CLI mode with v1.0-compatible arguments.
 
     Source: v1.0 main() lines 1626-1733.
@@ -43,18 +116,13 @@ def run_cli(args_list: list = None) -> int:
     parser.add_argument("--version", action="version", version=f"v{VERSION}")
 
     args = parser.parse_args(args_list)
-
-    min(max(1, args.workers), MAX_WORKERS)
-    (
-        [d.strip() for d in args.dirs.replace("，", ",").split(",") if d.strip()]
-        if args.dirs
-        else DEFAULT_TOP_DIRS
-    )
+    workers = min(max(1, args.workers), MAX_WORKERS)
+    tops = _parse_dirs(args)
 
     state_mgr = StateManager()
     state = state_mgr.load()
-    GitClient()
 
+    # ── Read-only commands (no lock needed) ──────────────────────
     if args.status:
         StatusReporter.show(state)
         return 0
@@ -64,7 +132,10 @@ def run_cli(args_list: list = None) -> int:
         if not lock.acquire():
             print("另一实例正在运行，无法生成报告")
             return 1
-        ReportGenerator.generate(state)
+        try:
+            ReportGenerator.generate(state)
+        finally:
+            lock.release()
         return 0
 
     if args.list:
@@ -72,8 +143,6 @@ def run_cli(args_list: list = None) -> int:
         if not git.is_repo_valid():
             print("仓库未初始化。请先运行 TUI 模式克隆仓库：python -m chinatxtbook")
             return 1
-        tops = args.dirs.split(",") if args.dirs else DEFAULT_TOP_DIRS
-        tops = [t.strip() for t in tops]
         for top in tops:
             if git.path_exists_in_tree(top):
                 children = git.ls_tree(f"{top}/") or []
@@ -81,27 +150,15 @@ def run_cli(args_list: list = None) -> int:
                 for c in children:
                     print(f"  {c}")
             else:
-                print(f"\n【{top}】— 不存在")
+                print(f"\n【{top}】- 不存在")
         return 0
 
-    # M-2: Reject unimplemented download/merge args with non-zero exit
-    unimplemented = [
-        a
-        for a in ["clean", "dry_run", "update", "reselect", "skip_verify"]
-        if getattr(args, a, False)
-    ]
-    if unimplemented:
-        print(
-            f"错误: 以下功能在 CLI 模式中不可用: {unimplemented}\n"
-            "请使用 TUI 模式: python -m chinatxtbook\n"
-            "或使用原版 v1.0 脚本: python china_textbook_v1.0.py"
-        )
-        return 2
-
-    # F-02: Show basic usage
-    print(
-        f"ChinaTextbook CLI v{VERSION}\n"
-        "只读功能: --status, --report, --list\n"
-        "完整下载功能请使用 TUI 模式: python -m chinatxtbook"
-    )
-    return 0
+    # ── Download/merge commands (need instance lock) ─────────────
+    lock = InstanceLock()
+    if not lock.acquire():
+        print("另一实例正在运行，无法执行下载")
+        return 1
+    try:
+        return _run_download(args, state, state_mgr, tops, workers)
+    finally:
+        lock.release()

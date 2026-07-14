@@ -1,12 +1,17 @@
-"""SCR-TASKS — Task manager (F6).
+"""SCR-TASKS - Task manager (F6).
 
 Shows active/pending/completed/failed background tasks.
 """
+
+from typing import TYPE_CHECKING, cast
 
 from textual.app import ComposeResult
 from textual.containers import Vertical, Horizontal
 from textual.screen import ModalScreen
 from textual.widgets import Static, DataTable, Button, ProgressBar
+
+if TYPE_CHECKING:
+    from chinatxtbook.ui.app import ChinaTextbookApp
 
 
 class TasksScreen(ModalScreen):
@@ -65,12 +70,12 @@ class TasksScreen(ModalScreen):
         if event.button.id == "task-close":
             self.dismiss()
         elif event.button.id == "task-cancel":
-            app = self.app
+            app = cast("ChinaTextbookApp", self.app)
             if app and hasattr(app, "pipeline_running") and app.pipeline_running:
                 if not getattr(app, "_quit_warned", False):
                     app._quit_warned = True
                     self.notify(
-                        "已请求取消 — 等待当前操作完成（再次按取消强制退出）", severity="warning"
+                        "已请求取消 - 等待当前操作完成（再次按取消强制退出）", severity="warning"
                     )
                 else:
                     self.notify("强制退出...", severity="error")
@@ -80,5 +85,5 @@ class TasksScreen(ModalScreen):
         elif event.button.id == "task-retry":
             self.notify("重试任务...", severity="information")
 
-    def action_dismiss(self) -> None:
-        self.dismiss()
+    async def action_dismiss(self, result: object = None) -> None:
+        self.dismiss(result)

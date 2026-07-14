@@ -44,7 +44,7 @@ class DownloadOrchestrator:
 
     # ── Clone ───────────────────────────────────────────────────
 
-    def clone(self, state: dict, repo_url: str = None) -> bool:
+    def clone(self, state: dict, repo_url: Optional[str] = None) -> bool:
         """Clone the repository (blobless). Source: v1.0 lines 1101-1130."""
         if not self.git.clone(repo_url):
             return False
@@ -115,14 +115,13 @@ class DownloadOrchestrator:
 
     # ── Scan ──────────────────────────────────────────────────
 
-    def scan(self, state: dict, force: bool = False) -> bool:
-        """Scan for split PDF groups. Source: v1.0 lines 1255-1296."""
-        if state.get("target_dirs") and not force:
-            self.log(f"已知 {len(state['target_dirs'])} 个含分卷的目录", "OK")
-            return True
+    def scan(self, state: dict, force: bool = False) -> Optional[dict]:
+        """Scan for split PDF groups. Returns manifest dict, or None on failure.
 
-        self.log("━━━ STEP 3: 扫描分卷 PDF ━━━", "STEP")
-
+        The manifest is returned so callers (CLI merge) can pass it to merge();
+        previously scan built it then discarded it.
+        Source: v1.0 lines 1255-1296.
+        """
         selected = state.get("selected_paths") or []
 
         # Build manifest from git tree (authoritative).
@@ -135,7 +134,7 @@ class DownloadOrchestrator:
                     f"无法读取 Git 树清单 ({p})，为避免生成不完整 PDF，停止处理",
                     "ERROR",
                 )
-                return False
+                return None
             all_files.extend(result)
         manifest = SplitManifest.build_expected_manifest("\n".join(all_files), selected)
         if manifest is None:
@@ -143,7 +142,7 @@ class DownloadOrchestrator:
                 "无法读取 Git 树清单，为避免生成不完整 PDF，停止处理",
                 "ERROR",
             )
-            return False
+            return None
 
         dirs = set(manifest.keys())
 
@@ -169,15 +168,19 @@ class DownloadOrchestrator:
                 "WARN",
             )
 
-        state["target_dirs"] = sorted(dirs)
-        self.state_mgr.save(state)
-
-        if not dirs:
-            self.log("未发现分卷文件", "WARN")
+        if state.get("target_dirs") and not force:
+            self.log(f"已知 {len(state['target_dirs'])} 个含分卷的目录", "OK")
         else:
-            n_groups = sum(len(v) for v in manifest.values())
-            self.log(f"发现 {len(dirs)} 个目录（Git 清单 {n_groups} 组分卷）", "OK")
-        return True
+            self.log("━━━ STEP 3: 扫描分卷 PDF ━━━", "STEP")
+            state["target_dirs"] = sorted(dirs)
+            self.state_mgr.save(state)
+            if not dirs:
+                self.log("未发现分卷文件", "WARN")
+            else:
+                n_groups = sum(len(v) for v in manifest.values())
+                self.log(f"发现 {len(dirs)} 个目录（Git 清单 {n_groups} 组分卷）", "OK")
+
+        return manifest
 
     # ── Restore missing ─────────────────────────────────────────
 

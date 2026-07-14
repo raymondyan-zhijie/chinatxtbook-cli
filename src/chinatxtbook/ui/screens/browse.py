@@ -1,8 +1,10 @@
-"""SCR-BROWSE — Main browsing interface.
+"""SCR-BROWSE - Main browsing interface.
 
 Left: GitHub repo directory tree. Center: files in selected directory.
 Right: file details. Bottom: selection status + hints.
 """
+
+from typing import TYPE_CHECKING, cast
 
 from textual.app import ComposeResult
 from textual.binding import Binding
@@ -15,6 +17,9 @@ from chinatxtbook.ui.widgets.catalog_tree import CatalogTreeWidget
 from chinatxtbook.ui.widgets.book_list import BookListWidget
 from chinatxtbook.ui.widgets.detail_panel import DetailPanelWidget
 from chinatxtbook.ui.widgets.status_bar import StatusBarWidget
+
+if TYPE_CHECKING:
+    from chinatxtbook.ui.app import ChinaTextbookApp
 
 
 class BrowseScreen(Screen):
@@ -41,7 +46,7 @@ class BrowseScreen(Screen):
         self.set_timer(0.2, self._init_catalog)
 
     def _init_catalog(self) -> None:
-        app = self.app
+        app = cast("ChinaTextbookApp", self.app)
         bar = self.query_one("#status-bar", StatusBarWidget)
 
         if not hasattr(app, "git_client") or not app.git_client:

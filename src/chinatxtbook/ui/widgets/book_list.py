@@ -6,11 +6,15 @@ Space/Enter natively toggles selection.
 
 import os
 from pathlib import Path
+from typing import Optional, TYPE_CHECKING, cast
 
 from textual.widgets import ListView, ListItem, Label
 from textual.binding import Binding
 
 from chinatxtbook.utils.format import fmt_size
+
+if TYPE_CHECKING:
+    from chinatxtbook.ui.app import ChinaTextbookApp
 
 _CN_NUMS = "零一二三四五六七八九十"
 
@@ -19,7 +23,7 @@ def _natural_key(s: str) -> tuple:
     """Natural sort key handling Chinese numerals and Arabic digits."""
     import re
 
-    parts = []
+    parts: list[tuple[int, object]] = []
     for chunk in re.split(r"(\d+)", s):
         if chunk.isdigit():
             parts.append((0, int(chunk)))
@@ -54,7 +58,7 @@ class BookListWidget(ListView):
     def on_mount(self) -> None:
         self.border_title = "教材列表"
 
-    def load_directory(self, git_client, dir_path: str, size_cache: dict = None):
+    def load_directory(self, git_client, dir_path: str, size_cache: Optional[dict] = None):
         """Load books in a directory, grouping split parts."""
         self.clear()
         self._book_meta.clear()
@@ -81,8 +85,8 @@ class BookListWidget(ListView):
             elif name.lower().endswith(".pdf"):
                 singles[name] = f
 
-        app = self.app
-        selected_keys = getattr(app, "selected_keys", set()) if app else set()
+        app = cast("ChinaTextbookApp", self.app)
+        selected_keys: set = getattr(app, "selected_keys", set()) if app else set()
         # Derive book status from output dir and state groups (per FR-014, UI Gap 9)
         state_groups = (app.state or {}).get("groups", {}) if app else {}
         from chinatxtbook.config import OUTPUT_DIR
@@ -162,7 +166,7 @@ class BookListWidget(ListView):
             return
         meta = self._book_meta.get(idx)
         if meta:
-            app = self.app
+            app = cast("ChinaTextbookApp", self.app)
             if app and hasattr(app, "push_screen"):
                 from chinatxtbook.ui.screens.detail_overlay import DetailOverlay
 

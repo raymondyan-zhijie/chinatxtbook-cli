@@ -1,4 +1,4 @@
-"""OVL-CONFIRM — Download confirmation overlay (F5).
+"""OVL-CONFIRM - Download confirmation overlay (F5).
 
 Shows download summary and requests user confirmation before proceeding.
 """
@@ -33,7 +33,7 @@ class ConfirmOverlay(ModalScreen):
 
     def on_mount(self) -> None:
         app = self.app
-        selected = getattr(app, "selected_keys", set())
+        selected: set = getattr(app, "selected_keys", set())
         books = getattr(app, "_catalog_books", [])
 
         total_books = len(selected)
@@ -82,5 +82,5 @@ class ConfirmOverlay(ModalScreen):
         else:
             self.dismiss(False)
 
-    def action_dismiss(self) -> None:
+    async def action_dismiss(self, result: object = None) -> None:
         self.dismiss(False)

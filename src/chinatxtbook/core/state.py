@@ -84,17 +84,16 @@ class StateManager:
         if self.state_file.exists():
             try:
                 s = json.loads(self.state_file.read_text("utf-8"))
-                # F-16/M-1: Load jsonschema and validate
+                # F-16/M-1: Load jsonschema and validate (schema is packaged
+                # in-package so it ships in wheels; read via importlib.resources)
                 try:
                     from jsonschema import Draft202012Validator, ValidationError
 
-                    schema_path = (
-                        Path(__file__).parent.parent.parent.parent
-                        / "schemas"
-                        / "app-state.schema.json"
-                    )
-                    if schema_path.exists():
-                        schema = json.loads(schema_path.read_text("utf-8"))
+                    from importlib.resources import files
+
+                    schema_path = files("chinatxtbook") / "schemas" / "app-state.schema.json"
+                    if schema_path.is_file():
+                        schema = json.loads(schema_path.read_text(encoding="utf-8"))
                         Draft202012Validator(schema).validate(s)
                         # Cross-field invariants (2.3 Section 13)
                         for k, v in (s.get("groups") or {}).items():

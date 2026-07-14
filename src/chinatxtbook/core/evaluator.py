@@ -57,7 +57,7 @@ class GroupEvaluator:
         """
         key = (Path(rel_dir) / base).as_posix()
         out_path = self.work_dir / rel_dir / base
-        rec = (state.get("groups") or {}).get(key)
+        rec = (state.get("groups") or {}).get(key) or {}
         strict = verify or clean
 
         # ── Duplicate part detection ──
@@ -244,7 +244,11 @@ class GroupEvaluator:
         """
         from chinatxtbook.core.manifest import SplitManifest
 
-        plans, errors, restores, skips, cleanups = [], {}, [], {}, []
+        plans: list = []
+        errors: dict = {}
+        restores: list = []
+        skips: dict = {}
+        cleanups: list = []
 
         for rel_dir in state.get("target_dirs", []):
             present = SplitManifest.find_split_groups(self.work_dir / rel_dir)

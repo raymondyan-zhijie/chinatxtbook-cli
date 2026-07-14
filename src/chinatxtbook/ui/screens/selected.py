@@ -1,4 +1,4 @@
-"""SCR-SELECTED — Selected books panel (F2).
+"""SCR-SELECTED - Selected books panel (F2).
 
 Summary and list of currently selected textbooks.
 """
@@ -45,7 +45,7 @@ class SelectedScreen(ModalScreen):
         empty = self.query_one("#selected-empty", Static)
         summary = self.query_one("#selected-summary", Static)
 
-        selected = getattr(app, "selected_keys", set())
+        selected: set = getattr(app, "selected_keys", set())
         if not selected:
             empty.update("未选择任何教材\n\n在左侧目录树中使用 Space 键选择")
             summary.update("")
@@ -76,5 +76,5 @@ class SelectedScreen(ModalScreen):
             if hasattr(app, "action_confirm_download"):
                 app.action_confirm_download()
 
-    def action_dismiss(self) -> None:
-        self.dismiss()
+    async def action_dismiss(self, result: object = None) -> None:
+        self.dismiss(result)

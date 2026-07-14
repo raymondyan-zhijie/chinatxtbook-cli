@@ -93,5 +93,5 @@ class SearchOverlay(ModalScreen):
                 app.notify(f"已定位: {book.get('name','')[:40]}")
         self.dismiss()
 
-    def action_dismiss(self) -> None:
-        self.dismiss()
+    async def action_dismiss(self, result: object = None) -> None:
+        self.dismiss(result)

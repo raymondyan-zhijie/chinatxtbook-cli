@@ -1,8 +1,10 @@
-"""OVL-DETAIL — Book detail overlay (Enter).
+"""OVL-DETAIL - Book detail overlay (Enter).
 
 Shows complete metadata for a focused book:
 full path, part sizes, SHA256, status history.
 """
+
+from typing import Optional
 
 from textual.app import ComposeResult
 from textual.containers import Vertical
@@ -23,7 +25,7 @@ class DetailOverlay(ModalScreen):
         ("escape", "dismiss", "关闭"),
     ]
 
-    def __init__(self, book_data: dict = None, **kwargs):
+    def __init__(self, book_data: Optional[dict] = None, **kwargs):
         super().__init__(**kwargs)
         self.book_data = book_data or {}
 
@@ -66,5 +68,5 @@ class DetailOverlay(ModalScreen):
         if event.button.id == "detail-close":
             self.dismiss()
 
-    def action_dismiss(self) -> None:
-        self.dismiss()
+    async def action_dismiss(self, result: object = None) -> None:
+        self.dismiss(result)

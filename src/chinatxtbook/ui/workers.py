@@ -164,9 +164,15 @@ class PipelineWorker:
             # Use git show to extract files (works around checkout/restore
             # pathspec bug in blobless clones)
             failed_paths = []
+            from chinatxtbook.utils.paths import PathPolicy
+
             for i, git_path in enumerate(all_paths):
-                dest = WORK_DIR / git_path
-                dest.parent.mkdir(parents=True, exist_ok=True)
+                # M-3: validate git-provided path before writing to workspace
+                dest = PathPolicy.safe_write_path(WORK_DIR, git_path)
+                if dest is None:
+                    _log(f"  PATH REJECTED RESTORE: {git_path}")
+                    failed_paths.append(git_path)
+                    continue
 
                 for attempt in range(3):
                     # Use raw subprocess (not git.run) to avoid text encoding
@@ -348,14 +354,18 @@ class PipelineWorker:
                 fail_count += 1
                 continue
             sd = WORK_DIR / rd
-            # Validate restore path too
+            # Validate restore path too (M-3: any rejected part rejects whole book)
+            src_rejected = False
             for pi in parts.values():
                 fn = pi[0] if isinstance(pi, tuple) else pi
                 safe_src = PathPolicy.resolve_within(WORK_DIR, f"{rd}/{fn}")
                 if safe_src is None:
                     _log(f"  PATH REJECTED SOURCE: {rd}/{fn}")
                     fail_count += 1
-                    continue
+                    src_rejected = True
+                    break
+            if src_rejected:
+                continue
             # Write directly to validated safe path
             of = safe_of
             od = safe_of.parent

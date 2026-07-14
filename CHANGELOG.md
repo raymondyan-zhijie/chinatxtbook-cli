@@ -1,29 +1,48 @@
 # Changelog
 
-## v1.1.0 (in development)
+## v1.1.0
 
 ### Architectural Changes
 - **Modular rewrite**: Single-file script (1734 lines) decomposed into package structure
   - `core/`: git_client, merger, evaluator, manifest, state, downloader, catalog, reporter
-  - `utils/`: logging, lockfile, format, platform
-  - `ui/`: Textual TUI (coming in Phase 2)
+  - `utils/`: logging, lockfile, format, platform, paths
+  - `ui/`: Textual TUI (three-panel layout, 9 screens, 14 hotkeys)
 - **Fixed repository**: GitHub only (multi-source switching removed per v1.1 design)
-- **Textual TUI**: Three-panel layout replacing menu-driven CLI (coming in Phase 2)
+- **Textual TUI** (default mode): three-panel layout (catalog tree / book list / detail)
+  replacing the menu-driven CLI; CLI retained as headless fallback with full
+  download/merge support via DownloadOrchestrator
+
+### New in v1.1
+- **TUI mode**: interactive browsing, selection, download pipeline, task management,
+  logs, update checks, help/diagnostics (F-01)
+- **CLI mode** (`--cli`): headless download/merge wired through DownloadOrchestrator -
+  supports `--status`, `--list`, `--report`, `--update`, `--reselect`, `--clean`,
+  `--dry-run`, `--skip-verify`, `--dirs`, `--workers` (F-02)
+- **State schema validation**: `schemas/app-state.schema.json` + jsonschema cross-field
+  invariants, packaged in-wheel so validation holds in installed artifacts (F-16/M-1)
+- **Path safety**: PathPolicy rejects traversal/absolute/symlink/NUL on all write paths,
+  including restore-to-workspace and output (F-17/M-3)
+- **Disk space check** before merge (F-07), **single-instance lock** with stale
+  reclamation (F-06), **group persistence** for breakpoint resume (F-04)
 
 ### Preserved from v1.0
 - All safety-critical logic preserved byte-for-byte:
-  - `evaluate_group()` → `core/evaluator.py`
-  - `merge_one_file()` → `core/merger.py`
-  - `invalidate_groups_by_diff()` → `core/state.py`
-  - `redact_url()` / `safe_error()` → `utils/format.py`
+  - `evaluate_group()` -> `core/evaluator.py`
+  - `merge_one_file()` -> `core/merger.py`
+  - `invalidate_groups_by_diff()` -> `core/state.py`
+  - `redact_url()` / `safe_error()` -> `utils/format.py`
 - State file backward compatibility (v4.1, v4.2, v4.3, v1.0)
-- Single-instance lock with stale recovery
 - SHA256 stream hashing, atomic writes, fsync
+- Fail-closed Git tree manifest reading, stale record marking, single-part rejection
 
 ### Removed from v1.0
 - Gitee mirror support and latency-based source selection
 - Transactional repo switching
 - `--use-gitee`, `--repo` CLI flags
+
+### Quality gates
+- ruff (strict) + black + compileall + pytest (82 tests) + pip-audit in CI
+- Package builds: wheel + sdist (schema included)
 
 ---
 
@@ -38,5 +57,5 @@ Key safety mechanisms:
 - Stale record marking with historical parts preservation
 - Single-part group rejection
 - Non-manifest group rejection
-- Atomic merge: tmp → flush → fsync → re-read verify → os.replace
+- Atomic merge: tmp -> flush -> fsync -> re-read verify -> os.replace
 - POSIX parent directory fsync
