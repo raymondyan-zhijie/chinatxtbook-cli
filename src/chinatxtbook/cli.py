@@ -20,7 +20,7 @@ from chinatxtbook.core.git_client import GitClient
 from chinatxtbook.core.state import StateManager
 from chinatxtbook.core.reporter import StatusReporter, ReportGenerator
 from chinatxtbook.utils.lockfile import InstanceLock
-from chinatxtbook.utils.platform import setup_console
+from chinatxtbook.utils.platform import setup_console, setup_interrupt_handler
 
 _LEVEL_PREFIX = {"ERROR": "✗", "OK": "✓", "WARN": "!", "STEP": "■", "DATA": " ", "INFO": " "}
 
@@ -101,6 +101,7 @@ def run_cli(args_list: Optional[list] = None) -> int:
     Source: v1.0 main() lines 1626-1733.
     """
     setup_console()
+    setup_interrupt_handler()
 
     parser = argparse.ArgumentParser(description=f"ChinaTextbook CLI v{VERSION}")
     parser.add_argument("--status", action="store_true", help="查看当前状态")
