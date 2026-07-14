@@ -5,6 +5,7 @@ from datetime import datetime
 
 import pytest
 
+from chinatxtbook import VERSION
 from chinatxtbook.core.state import StateManager, groups_in_selection
 
 
@@ -16,7 +17,7 @@ class TestStateManager:
 
     def test_new_state(self, state_mgr):
         s = state_mgr.new_state()
-        assert s["version"] == "1.1.0"
+        assert s["version"] == VERSION
         assert s["clone_done"] is False
         assert s["groups"] == {}
         assert s["last_failures"] == {}
@@ -44,7 +45,7 @@ class TestStateManager:
             "utf-8",
         )
         loaded = state_mgr.load()
-        assert loaded["version"] == "1.1.0"
+        assert loaded["version"] == VERSION
         assert loaded["clone_done"] is True
         assert "小学/语文/test.pdf" in loaded["groups"]
 
@@ -54,7 +55,7 @@ class TestStateManager:
         state_mgr.state_file.write_text(json.dumps(old_state), "utf-8")
 
         loaded = state_mgr.load()
-        assert loaded["version"] == "1.1.0"
+        assert loaded["version"] == VERSION
         # Old state should be backed up
         backups = list(state_mgr.state_file.parent.glob("state.json.*.bak"))
         assert len(backups) == 1
@@ -64,7 +65,7 @@ class TestStateManager:
         state_mgr.state_file.write_text("not valid json {{{")
 
         loaded = state_mgr.load()
-        assert loaded["version"] == "1.1.0"
+        assert loaded["version"] == VERSION
         assert loaded["clone_done"] is False
 
     def test_selection_fingerprint(self):
