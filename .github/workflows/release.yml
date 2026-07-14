@@ -65,9 +65,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - run: pip install build twine
+      - run: pip install build twine cyclonedx-bom
       - run: python -m build
       - run: python -m twine check dist/*
+      - run: pip install dist/*.whl && cyclonedx-py environment -o dist/sbom.json
+        continue-on-error: true
       - run: sha256sum dist/*.whl dist/*.tar.gz > dist/SHA256SUMS
       - uses: softprops/action-gh-release@v1
         with:
@@ -75,5 +77,7 @@ jobs:
             dist/*.whl
             dist/*.tar.gz
             dist/SHA256SUMS
+            dist/sbom.json
+          fail_on_unmatched_files: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
