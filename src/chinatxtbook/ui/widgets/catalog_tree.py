@@ -4,6 +4,7 @@ Pure directory tree mirroring the GitHub repository structure exactly.
 Lazy-loaded: children fetched from git on node expand.
 """
 
+from textual.binding import Binding
 from textual.widgets import Tree
 
 from chinatxtbook.core.git_client import GitClient
@@ -15,6 +16,31 @@ class CatalogTreeWidget(Tree):
     Shows directories only (no files). Lazy-loads children on expand.
     Highlighting a directory updates the center book list.
     """
+
+    BINDINGS = [
+        Binding("right", "expand_or_enter", "展开", show=False),
+        Binding("left", "collapse_or_parent", "折叠", show=False),
+    ]
+
+    def action_expand_or_enter(self) -> None:
+        """Right arrow: expand node, or step into first child if already expanded."""
+        node = self.cursor_node
+        if node is None:
+            return
+        if not node.is_expanded:
+            node.expand()
+        elif node.children:
+            self.action_cursor_down()
+
+    def action_collapse_or_parent(self) -> None:
+        """Left arrow: collapse node, or move to parent if already collapsed."""
+        node = self.cursor_node
+        if node is None:
+            return
+        if node.is_expanded:
+            node.collapse()
+        else:
+            self.action_cursor_parent()
 
     def __init__(self, *args, **kwargs):
         super().__init__("📁 仓库目录", *args, **kwargs)

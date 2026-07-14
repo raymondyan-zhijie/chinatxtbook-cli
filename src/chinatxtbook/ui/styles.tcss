@@ -108,16 +108,24 @@ Header {
     color: $text;
 }
 
+#status-bar Horizontal {
+    height: 1;
+    width: 100%;
+}
+
 #status-selection {
+    width: 1fr;
     color: $success;
     text-style: bold;
 }
 
 #status-progress {
+    width: 1fr;
     color: $warning;
 }
 
 #status-shortcuts {
+    width: auto;
     color: $text-muted;
     content-align: right middle;
 }

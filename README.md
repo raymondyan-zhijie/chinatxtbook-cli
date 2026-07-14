@@ -38,7 +38,7 @@ python -m chinatxtbook --cli --status
 ## 目录结构
 
 ```
-D:\TextBook\
+chinatxtbook-cli/
 ├── src/chinatxtbook/
 │   ├── __init__.py          # VERSION, COMPATIBLE_STATE_VERSIONS
 │   ├── __main__.py           # 入口点（TUI/CLI 路由）
@@ -83,15 +83,18 @@ D:\TextBook\
 │       ├── lockfile.py       # 单实例锁（O_EXCL+PID+stale回收）
 │       ├── logging.py        # 线程安全日志+轮转
 │       └── platform.py       # 终端设置+中断处理+SIGINT
-├── tests/                    # 51 个测试
+├── tests/                    # 82 个测试
 │   ├── core/
-│   │   ├── test_evaluator.py  # 决策引擎 12 测试
-│   │   ├── test_merger.py     # 原子合并 8 测试
-│   │   ├── test_manifest.py   # 分卷清单 9 测试
-│   │   └── test_state.py      # 状态管理 8 测试
+│   │   ├── test_evaluator.py   # 决策引擎 12 测试
+│   │   ├── test_merger.py      # 原子合并 7 测试
+│   │   ├── test_manifest.py    # 分卷清单 11 测试
+│   │   ├── test_state.py       # 状态管理 8 测试
+│   │   └── test_downloader.py  # 下载编排 11 测试
 │   └── utils/
-│       └── test_format.py     # 格式化 14 测试
-├── docs/                     # 设计文档（14 份 .docx + .xlsx）
+│       ├── test_format.py      # 格式化 14 测试
+│       ├── test_paths.py       # PathPolicy 12 测试
+│       └── test_lockfile.py    # InstanceLock 7 测试
+├── docs/                     # 设计文档（.docx/.xlsx + 文本提取）
 ├── .github/workflows/        # CI/CD
 ├── scripts/build_exe.py      # PyInstaller 构建
 └── pyproject.toml            # 项目元数据
@@ -127,10 +130,12 @@ Preparing → Downloading → Scanning → Merging → Verifying → Done
 ## 运行测试
 
 ```powershell
-pytest tests/ -v        # 51 tests
+pytest tests/ -v        # 82 tests
 ```
 
 ## 设计文档索引
+
+所有设计文档（.docx/.xlsx 及文本提取）位于 [`docs/`](docs/) 目录。
 
 | 编号 | 文件 | 内容 |
 |------|------|------|

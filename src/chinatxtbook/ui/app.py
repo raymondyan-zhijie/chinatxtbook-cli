@@ -336,7 +336,11 @@ class ChinaTextbookApp(App):
         from textual.containers import Vertical
 
         class QuitScreen(ModalScreen):
-            BINDINGS = [("escape", "dismiss", "返回")]
+            BINDINGS = [
+                ("escape", "dismiss", "返回"),
+                ("up", "focus_previous", "上一个"),
+                ("down", "focus_next", "下一个"),
+            ]
 
             def compose(self):
                 with Vertical():
@@ -344,11 +348,20 @@ class ChinaTextbookApp(App):
                     yield Button("退出 (Enter)", variant="error", id="quit-yes")
                     yield Button("返回 (Esc)", variant="default", id="quit-no")
 
+            def on_mount(self) -> None:
+                self.query_one("#quit-yes").focus()
+
             def on_button_pressed(self, event):
                 if event.button.id == "quit-yes":
                     self.app.exit()
                 else:
                     self.dismiss()
+
+            def action_focus_next(self) -> None:
+                self.focus_next()
+
+            def action_focus_previous(self) -> None:
+                self.focus_previous()
 
             async def action_dismiss(self, result: object = None) -> None:
                 self.dismiss(result)
