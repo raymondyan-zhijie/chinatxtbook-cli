@@ -16,25 +16,61 @@ from chinatxtbook.utils.format import fmt_size
 if TYPE_CHECKING:
     from chinatxtbook.ui.app import ChinaTextbookApp
 
-_CN_NUMS = "零一二三四五六七八九十"
+_CN_DIGIT = {
+    "零": 0,
+    "一": 1,
+    "二": 2,
+    "三": 3,
+    "四": 4,
+    "五": 5,
+    "六": 6,
+    "七": 7,
+    "八": 8,
+    "九": 9,
+}
+
+
+def _cn_num_to_int(s: str) -> int | None:
+    """Parse a Chinese numeral string (1-99) to int. None if not pure numeral.
+
+    一=1..九=9, 十=10, 十一=11..十九=19, 二十=20..九十=90, 二十一=21..九十九=99.
+    """
+    if not s or any(c not in _CN_DIGIT and c != "十" for c in s):
+        return None
+    if "十" in s:
+        tens, _, ones = s.partition("十")
+        return (_CN_DIGIT[tens] if tens else 1) * 10 + (_CN_DIGIT[ones] if ones else 0)
+    val = 0
+    for c in s:
+        val = val * 10 + _CN_DIGIT[c]
+    return val
 
 
 def _natural_key(s: str) -> tuple:
-    """Natural sort key handling Chinese numerals and Arabic digits."""
-    import re
-
+    """Natural sort key: Arabic and Chinese numerals sorted by numeric value."""
     parts: list[tuple[int, object]] = []
-    for chunk in re.split(r"(\d+)", s):
-        if chunk.isdigit():
-            parts.append((0, int(chunk)))
+    i = 0
+    n = len(s)
+    while i < n:
+        if s[i].isdigit():
+            j = i
+            while j < n and s[j].isdigit():
+                j += 1
+            parts.append((0, int(s[i:j])))
+            i = j
+        elif s[i] in _CN_DIGIT or s[i] == "十":
+            j = i
+            while j < n and (s[j] in _CN_DIGIT or s[j] == "十"):
+                j += 1
+            cn = _cn_num_to_int(s[i:j])
+            parts.append((0, cn) if cn is not None else (1, s[i:j]))
+            i = j
         else:
-            # Check for Chinese numerals
-            cn_val = 0
-            for ch in chunk:
-                idx = _CN_NUMS.find(ch)
-                if idx > 0:
-                    cn_val = cn_val * 10 + idx
-            parts.append((1, cn_val if cn_val > 0 else chunk))
+            j = i
+            while j < n and not s[j].isdigit() and s[j] not in _CN_DIGIT and s[j] != "十":
+                j += 1
+            parts.append((1, s[i:j]))
+            i = j
     return tuple(parts)
 
 
