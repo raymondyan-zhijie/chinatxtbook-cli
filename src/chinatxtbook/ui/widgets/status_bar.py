@@ -31,7 +31,7 @@ class StatusBarWidget(Container):
         if selected_count > 0:
             sel.update(
                 f"☑ 已选 {selected_count} 册 │ 💾 {fmt_size(estimated_size)} │ "
-                f"💿 {free_str} │ F5下载"
+                f"💿 {free_str} │ F2查看清单 F5下载"
             )
         else:
             sel.update(f"📦 就绪 │ 💿 {free_str} │ Space选择 F5下载")

@@ -52,12 +52,19 @@ class ConfirmOverlay(ModalScreen):
         free_gb = usage.free / (1024**3)
         peak = int(total_size * 3.2) + 2 * 1024**3
 
+        # Show selected books list
+        selected_books = [b for b in books if b.get("key") in selected]
+        names = [b.get("name", b.get("key", "?"))[:50] for b in selected_books[:10]]
+        book_list = "\n".join(f"  📄 {n}" for n in names)
+        if len(selected_books) > 10:
+            book_list += f"\n  ... 共 {total_books} 册"
+
         summary = self.query_one("#confirm-summary", Static)
         summary.update(
-            f"教材数: {total_books} 册\n"
-            f"源文件数: {total_files} 个\n"
-            f"预估下载量: {fmt_size(total_size)}\n"
-            f"峰值磁盘占用: {fmt_size(peak)}"
+            f"教材数: {total_books} 册 | 源文件: {total_files} 个\n"
+            f"预估: {fmt_size(total_size)} | 峰值: {fmt_size(peak)}\n"
+            f"保存至: {self.app.state.get('output_dir', 'ChinaTextbook_Output')}\n"
+            f"━━ 已选教材 ━━\n{book_list}"
         )
 
         disk = self.query_one("#confirm-disk", Static)

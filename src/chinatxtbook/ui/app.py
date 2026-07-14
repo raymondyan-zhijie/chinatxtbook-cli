@@ -80,6 +80,31 @@ class ChinaTextbookApp(App):
         self.state = self.state_mgr.load()
         self._check_repo_status()
         self.push_screen(BrowseScreen())
+        # Background update check
+        self.run_worker(self._check_updates())
+
+    async def _check_updates(self):
+        """Background check for textbook repo updates."""
+        import asyncio
+        await asyncio.sleep(3)  # Wait for UI to settle
+        if not self.git_client or not self.git_client.is_repo_valid():
+            return
+        try:
+            branch = self.state.get("default_branch", "master")
+            old = self.git_client.get_head_commit()
+            self.git_client.fetch(branch)
+            new = self.git_client.rev_parse(f"origin/{branch}")
+            if old and new and old != new:
+                self.sub_title = f"📦 仓库就绪 [{branch}] 🔔 有更新"
+                self.notify(
+                    f"教材仓库有更新 ({old[:8]}→{new[:8]})，按 F9 查看详情",
+                    severity="warning",
+                )
+                self._log_buffer.append(
+                    ("WARN", f"Repository updated: {old[:8]}→{new[:8]}")
+                )
+        except Exception:
+            pass
 
     def _check_repo_status(self) -> None:
         if self.git_client and self.git_client.is_repo_valid():
