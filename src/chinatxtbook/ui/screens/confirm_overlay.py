@@ -17,7 +17,7 @@ class ConfirmOverlay(ModalScreen):
 
     BINDINGS = [
         ("escape", "dismiss", "取消"),
-        ("up,down", "focus_next_button", "", show=False),
+        ("up,down", "focus_next_button"),
     ]
 
     def compose(self) -> ComposeResult:
