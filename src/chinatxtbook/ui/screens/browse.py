@@ -65,7 +65,7 @@ class BrowseScreen(Screen):
             try:
                 commit = git.get_head_commit()
                 dirs, files, truncated = git.get_remote_sizes(
-                    commit or app.state.get("default_branch", "master")
+                    commit or app.state.get("default_branch") or "master"
                 )
                 if dirs:
                     app.state["size_cache"] = {

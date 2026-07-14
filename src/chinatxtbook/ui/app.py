@@ -4,6 +4,7 @@ Screen-based architecture per design docs 2.1-2.5.
 UI -> Application layer -> Services/Core (no Widget holds GitClient).
 """
 
+import asyncio
 from typing import Optional
 
 from textual.app import App
@@ -96,7 +97,7 @@ class ChinaTextbookApp(App):
                         "请删除 ChinaTextbook_Workspace 目录后重新运行",
                         severity="error",
                     )
-            branch = self.state.get("default_branch", "master")
+            branch = self.state.get("default_branch") or "master"
             self.sub_title = f"📦 仓库就绪 [{branch}]"
         else:
             self.sub_title = "📦 未初始化 - 按 F5 克隆仓库"
@@ -197,15 +198,47 @@ class ChinaTextbookApp(App):
         self.push_screen(SelectedScreen())
 
     def action_confirm_download(self) -> None:
-        """[F5] Show download confirmation, start on confirm."""
+        """[F5] Clone repo if needed, else show download confirmation."""
         if self.pipeline_running:
             self.notify("下载任务正在进行中", severity="warning")
+            return
+        # Repo not initialized -> clone first (F5 doubles as clone trigger)
+        if not self.git_client or not self.git_client.is_repo_valid():
+            self._clone_repo()
             return
         if not self.selected_keys:
             self.notify("请先在左侧目录树中展开到底层，然后 Space 选择教材", severity="warning")
             return
         # Push confirmation screen with callback
         self.push_screen(ConfirmOverlay(), callback=self._on_download_confirmed)
+
+    def _clone_repo(self) -> None:
+        """Clone the repo when F5 pressed but repo not yet initialized."""
+        if not self.git_client:
+            self.git_client = GitClient(work_dir=WORK_DIR, repo_url=GITHUB_REPO)
+        self.notify("开始克隆仓库（轻量克隆，仅目录树）...", severity="information")
+        self.pipeline_running = True
+
+        async def _do_clone():
+            try:
+                ok = await asyncio.to_thread(self.git_client.clone, self.git_client.repo_url)
+                if ok:
+                    self.state = self.state_mgr.load()
+                    self.git_client.detect_default_branch(self.state)
+                    self.state_mgr.save(self.state)
+                    self._check_repo_status()
+                    self.notify("仓库克隆完成，可浏览目录", severity="ok")
+                    screen = self.screen
+                    if hasattr(screen, "_init_catalog"):
+                        screen._init_catalog()
+                else:
+                    self.notify("克隆失败，请检查网络或代理", severity="error")
+            except Exception as e:
+                self.notify(f"克隆失败: {e}", severity="error")
+            finally:
+                self.pipeline_running = False
+
+        self.run_worker(_do_clone(), exclusive=True)
 
     def _on_download_confirmed(self, confirmed: object = None) -> None:
         """Callback after ConfirmOverlay is dismissed."""
@@ -237,7 +270,7 @@ class ChinaTextbookApp(App):
         screen = UpdatesScreen()
         if self.git_client and self.git_client.is_repo_valid():
             try:
-                branch = self.state.get("default_branch", "master")
+                branch = self.state.get("default_branch") or "master"
                 old = self.git_client.get_head_commit()
                 self.git_client.fetch(branch)
                 new = self.git_client.rev_parse(f"origin/{branch}")

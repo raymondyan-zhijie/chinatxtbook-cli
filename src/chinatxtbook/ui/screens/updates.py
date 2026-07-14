@@ -90,7 +90,7 @@ class UpdatesScreen(ModalScreen):
         if app and hasattr(app, "git_client") and app.git_client:
             try:
                 git = app.git_client
-                branch = app.state.get("default_branch", "master")
+                branch = app.state.get("default_branch") or "master"
                 old = git.get_head_commit()
                 git.fetch(branch)
                 new = git.rev_parse(f"origin/{branch}")

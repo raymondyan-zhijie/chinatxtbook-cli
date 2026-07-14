@@ -52,7 +52,9 @@ class DetailOverlay(ModalScreen):
         parts = d.get("parts", {})
         if isinstance(parts, dict):
             for idx in sorted(parts):
-                lines.append(f"  卷 {idx}: {parts[idx]}")
+                p = parts[idx]
+                p_name = p[0] if isinstance(p, tuple) else p
+                lines.append(f"  卷 {idx}: {p_name}")
         elif isinstance(parts, list):
             for i, p in enumerate(parts, 1):
                 lines.append(f"  卷 {i}: {p}")

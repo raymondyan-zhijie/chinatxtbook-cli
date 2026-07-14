@@ -52,6 +52,10 @@ def _run_download(args, state, state_mgr, tops, workers) -> int:
     if not git.is_repo_valid():
         if not orch.clone(state, git.repo_url):
             return 1
+        # Re-detect default branch now that the repo is cloned
+        state.pop("default_branch", None)
+        branch = git.detect_default_branch(state)
+        state_mgr.save(state)
 
     # --update: fetch + fast-forward + stale marking, then return.
     # Re-run the default flow afterwards to re-download changed content.

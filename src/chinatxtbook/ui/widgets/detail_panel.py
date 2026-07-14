@@ -50,6 +50,8 @@ class DetailPanelWidget(Container):
             lines.append("")
             lines.append("━━ 分卷详情 ━━")
             for idx in sorted(parts):
-                lines.append(f"  卷 {idx}: {parts[idx]}")
+                p = parts[idx]
+                p_name = p[0] if isinstance(p, tuple) else p
+                lines.append(f"  卷 {idx}: {p_name}")
 
         meta_w.update("\n".join(lines))

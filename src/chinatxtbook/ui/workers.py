@@ -106,12 +106,10 @@ class PipelineWorker:
             app.pipeline_running = False
             return
 
-        sorted(d.rstrip("/") + "/" for d in dirs)
-
         # Step 3: Fetch + Checkout
         self._ui_status("Fetching updates...")
         self._ui_progress(10, "Downloading")
-        branch = state.get("default_branch", "master")
+        branch = state.get("default_branch") or "master"
 
         try:
             # N-6: Only delete index.lock if no other git process is active
@@ -194,6 +192,7 @@ class PipelineWorker:
                     await asyncio.sleep(1)
                 else:
                     failed_paths.append(git_path)
+                    dest.unlink(missing_ok=True)
 
                 pct = 20 + int(30 * (i + 1) / max(len(all_paths), 1))
                 if i % 10 == 0:
