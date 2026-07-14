@@ -54,12 +54,9 @@ class LogsScreen(ModalScreen):
         if event.button.id == "log-close":
             self.dismiss()
         elif event.button.id == "log-copy":
-            log_view = self.query_one("#log-view", RichLog)
-            text = log_view.text  # type: ignore[attr-defined]
+            text = "\n".join(f"[{lv}] {msg}" for lv, msg in self._log_entries)
             try:
-                import subprocess
-                import sys
-
+                import subprocess, sys
                 if sys.platform == "win32":
                     subprocess.run(["clip"], input=text, text=True, shell=True)
                 else:
@@ -69,11 +66,9 @@ class LogsScreen(ModalScreen):
                 self.notify(f"复制失败（日志共 {len(text)} 字符）", severity="warning")
         elif event.button.id == "log-export":
             from datetime import datetime
-            import sys
-            import platform
-            import shutil
-
+            import sys, platform, shutil
             fn = f"diagnostic_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+            text = "\n".join(f"[{lv}] {msg}" for lv, msg in self._log_entries)
             lines = [
                 "ChinaTextbook Diagnostic Report",
                 f"Generated: {datetime.now().isoformat()}",
@@ -81,7 +76,7 @@ class LogsScreen(ModalScreen):
                 f"Platform: {platform.system()} {platform.release()}",
                 f"Terminal: {shutil.get_terminal_size().columns}x{shutil.get_terminal_size().lines}",
                 "",
-                self.query_one("#log-view", RichLog).text,  # type: ignore[attr-defined]
+                text,
             ]
             with open(fn, "w", encoding="utf-8") as f:
                 f.write("\n".join(lines))
