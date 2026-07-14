@@ -123,9 +123,26 @@ class ChinaTextbookApp(App):
                         severity="error",
                     )
             branch = self.state.get("default_branch") or "master"
-            self.sub_title = f"📦 仓库就绪 [{branch}]"
+            last_date = self._get_last_commit_date()
+            self.sub_title = f"📦 仓库就绪 [{branch}] — {last_date}"
         else:
             self.sub_title = "📦 未初始化 - 按 F5 克隆仓库"
+
+    def _get_last_commit_date(self) -> str:
+        """Get the last commit date for display."""
+        try:
+            import subprocess, os
+
+            r = subprocess.run(
+                ["git", "-C", str(self.git_client.work_dir), "log", "-1", "--format=%ci"],
+                capture_output=True, text=True, timeout=5,
+                env={**os.environ, "GIT_TERMINAL_PROMPT": "0"},
+            )
+            if r.returncode == 0 and r.stdout.strip():
+                return r.stdout.strip()[:10]  # YYYY-MM-DD
+        except Exception:
+            pass
+        return "?"
 
     def _update_status_bar(self) -> None:
         try:
@@ -156,8 +173,11 @@ class ChinaTextbookApp(App):
     # ── Actions ───────────────────────────────────────────────
 
     def action_go_back(self) -> None:
-        if len(self.screen_stack) > 1:
+        # Don't pop the last real screen — only pop modals/overlays
+        if len(self.screen_stack) > 2:
             self.pop_screen()
+        elif len(self.screen_stack) == 2:
+            self.notify("已在主界面，按 Q 退出", severity="information")
 
     def action_search(self) -> None:
         self.push_screen(SearchOverlay())
