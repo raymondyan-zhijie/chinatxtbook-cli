@@ -52,10 +52,14 @@ class ConfirmOverlay(ModalScreen):
         free_gb = usage.free / (1024**3)
         peak = int(total_size * 3.2) + 2 * 1024**3
 
+        from chinatxtbook.config import OUTPUT_DIR
+
         summary = self.query_one("#confirm-summary", Static)
         summary.update(
             f"教材数: {total_books} 册 | 源文件: {total_files} 个 | "
-            f"预估: {fmt_size(total_size)} | 峰值: {fmt_size(peak)}"
+            f"预估: {fmt_size(total_size)} | 峰值: {fmt_size(peak)}\n"
+            f"📁 保存至: {OUTPUT_DIR.resolve()}\n"
+            f"   (设置环境变量 CHINATXTBOOK_OUTPUT_DIR 可更改)"
         )
 
         # Scrollable book list (shows ALL books)

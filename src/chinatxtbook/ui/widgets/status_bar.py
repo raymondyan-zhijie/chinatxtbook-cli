@@ -34,7 +34,8 @@ class StatusBarWidget(Container):
                 f"💿 {free_str} │ F2查看清单 F5下载"
             )
         else:
-            sel.update(f"📦 就绪 │ 💿 {free_str} │ Space选择 F5下载")
+            from chinatxtbook.config import OUTPUT_DIR
+            sel.update(f"📦 就绪 │ 💿 {free_str} │ 📁 {OUTPUT_DIR} │ Space选择 F5下载")
 
     def update_progress(
         self, pct: float = 0, stage: str = "", current: str = "", done: int = 0, total: int = 0
