@@ -48,30 +48,32 @@ jobs:
           python-version: '3.11'
       - run: pip install pyinstaller textual
       - run: python scripts/build_exe.py
-      - run: sha256sum dist/ChinaTextbook.exe > dist/SHA256SUMS
+      - run: sha256sum dist/ChinaTextbook.exe > dist/SHA256SUMS.exe
       - uses: softprops/action-gh-release@v1
         with:
           files: |
             dist/ChinaTextbook.exe
-            dist/SHA256SUMS
+            dist/SHA256SUMS.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   build-wheel:
-    needs: test
+    needs: [test, build-exe]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - run: pip install build
+      - run: pip install build twine
       - run: python -m build
-      - run: sha256sum dist/* > dist/SHA256SUMS
+      - run: python -m twine check dist/*
+      - run: sha256sum dist/*.whl dist/*.tar.gz > dist/SHA256SUMS
       - uses: softprops/action-gh-release@v1
         with:
           files: |
-            dist/*
+            dist/*.whl
+            dist/*.tar.gz
             dist/SHA256SUMS
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

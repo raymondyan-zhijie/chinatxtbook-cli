@@ -4,18 +4,19 @@ import asyncio
 import os
 import subprocess
 from datetime import datetime
-from pathlib import Path
 
-from chinatxtbook.config import WORK_DIR, OUTPUT_DIR, CHUNK_SIZE
-
-LOG_FILE = Path("pipeline.log")
+from chinatxtbook.config import WORK_DIR, OUTPUT_DIR, CHUNK_SIZE, LOG_FILE, LOG_MAX_BYTES
 
 
 def _log(msg: str):
-    """Write to pipeline log file only (no stdout pollution in TUI)."""
+    """Write to log file only (no stdout pollution in TUI). N-5: rotation."""
     ts = datetime.now().strftime("%H:%M:%S")
     line = f"[{ts}] {msg}"
     try:
+        if LOG_FILE.exists() and LOG_FILE.stat().st_size > LOG_MAX_BYTES:
+            backup = LOG_FILE.with_name(LOG_FILE.name + ".1")
+            backup.unlink(missing_ok=True)
+            LOG_FILE.replace(backup)
         with open(LOG_FILE, "a", encoding="utf-8") as f:
             f.write(line + "\n")
             f.flush()
@@ -165,6 +166,7 @@ class PipelineWorker:
             # pathspec bug in blobless clones)
             failed_paths = []
             from chinatxtbook.utils.paths import PathPolicy
+            from chinatxtbook.utils.format import safe_error
 
             for i, git_path in enumerate(all_paths):
                 # M-3: validate git-provided path before writing to workspace
@@ -175,19 +177,20 @@ class PipelineWorker:
                     continue
 
                 for attempt in range(3):
-                    # Use raw subprocess (not git.run) to avoid text encoding
-                    # which corrupts binary PDF data
-                    r = subprocess.run(
-                        ["git", "-C", str(WORK_DIR), "show", f"HEAD:{git_path}"],
-                        capture_output=True,
-                        env={**os.environ, "GIT_TERMINAL_PROMPT": "0"},
-                    )
+                    # F-08: stream git show to file (avoid loading full blob into memory)
+                    with open(dest, "wb") as out_f:
+                        r = subprocess.run(
+                            ["git", "-C", str(WORK_DIR), "show", f"HEAD:{git_path}"],
+                            stdout=out_f,
+                            stderr=subprocess.PIPE,
+                            env={**os.environ, "GIT_TERMINAL_PROMPT": "0"},
+                        )
                     if r.returncode == 0:
-                        dest.write_bytes(r.stdout)
                         break
-                    from chinatxtbook.utils.format import safe_error
-
-                    _log(f"show {git_path[:50]} attempt {attempt+1}: {safe_error(r.stderr, 80)}")
+                    _log(
+                        f"show {git_path[:50]} attempt {attempt+1}: "
+                        f"{safe_error(r.stderr.decode('utf-8', 'replace'), 80)}"
+                    )
                     await asyncio.sleep(1)
                 else:
                     failed_paths.append(git_path)

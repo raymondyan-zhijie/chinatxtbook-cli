@@ -14,6 +14,7 @@ from typing import Optional
 
 from chinatxtbook import VERSION, COMPATIBLE_STATE_VERSIONS, MIGRATABLE_STATE_VERSIONS
 from chinatxtbook.config import STATE_FILE
+from chinatxtbook.utils.format import safe_error
 
 
 class StateManager:
@@ -221,9 +222,9 @@ class StateManager:
                     "GIT_TERMINAL_PROMPT": "0",
                 },
             )
-            return r.returncode == 0, r.stdout, r.stderr
+            return r.returncode == 0, r.stdout, safe_error(r.stderr)
         except Exception as e:
-            return False, "", str(e)
+            return False, "", safe_error(str(e))
 
 
 def groups_in_selection(state: dict) -> dict:
