@@ -290,9 +290,14 @@ class ChinaTextbookApp(App):
         if not confirmed:
             return
         selected = [b for b in self._catalog_books if b.get("key") in self.selected_keys]
+        # Diagnostic: log selection mismatch
+        self._log_buffer.append(
+            ("DATA", f"Selection: {len(self._catalog_books)} cached, "
+             f"{len(self.selected_keys)} selected, {len(selected)} matched")
+        )
         if not selected:
             self.notify(
-                "未找到选中教材的元数据。请重新选择教材后再试。",
+                f"未找到选中教材({len(self.selected_keys)}键/{len(self._catalog_books)}缓存)。请重新选择。",
                 severity="error",
             )
             return
